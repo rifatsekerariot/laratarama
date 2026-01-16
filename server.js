@@ -172,7 +172,7 @@ const checkAuth = (req, res, next) => {
     ];
 
     // Check allowlist or prefixes
-    if (publicPaths.includes(req.path) || req.path.startsWith('/webhook/') || req.path.startsWith('/css/') || req.path.startsWith('/js/')) {
+    if (publicPaths.includes(req.path) || req.path === '/webhook' || req.path.startsWith('/webhook/') || req.path.startsWith('/css/') || req.path.startsWith('/js/')) {
         return next();
     }
 
