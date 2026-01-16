@@ -6,7 +6,7 @@ services:
     container_name: ariot_app
     restart: always
     ports:
-      - "80:3000"
+      - "3000:3000"
     environment:
       - PORT=3000
       - DB_HOST=db
