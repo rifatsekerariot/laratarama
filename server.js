@@ -391,17 +391,24 @@ const processWebhook = async (slug, req, res) => {
             return res.status(400).send('Decoder Error');
         }
 
-        if (parsed && parsed.latitude && parsed.longitude) {
-            await pool.query('INSERT INTO measurements (gateway_id, rssi, snr, frequency, latitude, longitude) VALUES ($1,$2,$3,$4,$5,$6)',
-                [parsed.gateway_id || 'gw', parsed.rssi || -120, parsed.snr || 0, parsed.frequency || 868, parsed.latitude, parsed.longitude]);
+        // Validation: We need at least Lat/Lng to save a point.
+        // We also now check/save spreading_factor
+        if (parsed && (parsed.latitude || parsed.lat) && (parsed.longitude || parsed.lng || parsed.lon)) {
+            const lat = parsed.latitude || parsed.lat;
+            const lng = parsed.longitude || parsed.lng || parsed.lon;
+            const sf = parsed.spreadingFactor || parsed.sf || parsed.spreading_factor || null; // Support multiple naming conventions
+
+            await pool.query('INSERT INTO measurements (gateway_id, rssi, snr, frequency, spreading_factor, latitude, longitude) VALUES ($1,$2,$3,$4,$5,$6, $7)',
+                [parsed.gateway_id || 'gw', parsed.rssi || -120, parsed.snr || 0, parsed.frequency || 868, sf, lat, lng]);
 
             await pool.query("INSERT INTO system_logs (source, level, message, details) VALUES ('webhook', 'info', 'Data Processed Successfully', $1)",
                 [JSON.stringify({ ...loggingContext, parsed })]);
 
             res.send('OK');
         } else {
-            await pool.query("INSERT INTO system_logs (source, level, message, details) VALUES ('webhook', 'warn', 'No Location in Data', $1)",
-                [JSON.stringify({ ...loggingContext, parsed })]);
+            // Log the FAIL with full payload so user can see WHY it failed (missing lat/lon)
+            await pool.query("INSERT INTO system_logs (source, level, message, details) VALUES ('webhook', 'warn', 'Skipped: No Location Data', $1)",
+                [JSON.stringify({ ...loggingContext, reason: 'Latitude/Longitude missing in parsed output' })]);
             res.status(200).send('No Location Data');
         }
     } catch (e) {

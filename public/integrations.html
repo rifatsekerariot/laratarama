@@ -151,13 +151,22 @@
                     <div class="form-group">
                         <label>Javascript Decoder</label>
                         <textarea id="script" required>
-// (payload) -> { gw_id, rssi, snr, lat, lng }
+// Universal Decoder for ChirpStack / TTN / Custom
+// (payload) -> { gw_id, rssi, snr, lat, lng, sf }
 return {
-    gateway_id: payload.gatewayID || 'unknown',
-    rssi: payload.rxInfo ? payload.rxInfo[0].rssi : -100,
-    snr: payload.rxInfo ? payload.rxInfo[0].loRaSNR : 0,
-    latitude: payload.latitude,
-    longitude: payload.longitude
+    gateway_id: payload.gatewayId || payload.gatewayID || (payload.rxInfo && payload.rxInfo[0].gatewayID) || 'gw',
+    
+    // Signal Metrics (Try top-level, then nested)
+    rssi: payload.rssi || (payload.rxInfo && payload.rxInfo[0].rssi) || -120,
+    snr: payload.snr || (payload.rxInfo && payload.rxInfo[0].loRaSNR) || 0,
+    spreadingFactor: payload.spreadingFactor || (payload.txInfo && payload.txInfo.modulation && payload.txInfo.modulation.lora && payload.txInfo.modulation.lora.spreadingFactor) || 7,
+    
+    // Location (CRITICAL: Must have one of these!)
+    // 1. Top-level 'location' object
+    // 2. Metadata 'rxInfo' location
+    // 3. Flattened 'latitude'/'longitude' keys
+    latitude: (payload.location && payload.location.latitude) || (payload.rxInfo && payload.rxInfo[0].location && payload.rxInfo[0].location.latitude) || payload.latitude || payload.lat,
+    longitude: (payload.location && payload.location.longitude) || (payload.rxInfo && payload.rxInfo[0].location && payload.rxInfo[0].location.longitude) || payload.longitude || payload.lng
 };</textarea>
                     </div>
                     <button type="submit">Entegrasyonu Kaydet</button>
