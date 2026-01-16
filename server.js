@@ -434,6 +434,7 @@ const processWebhook = async (slug, req, res) => {
         let parsed;
         try {
             parsed = parserFunc(req.body);
+            console.log('🔍 Webhook Parsed Data:', JSON.stringify(parsed, null, 2));
         } catch (e) {
             await pool.query("INSERT INTO system_logs (source, level, message, details) VALUES ('webhook', 'error', 'Decoder Script Failed', $1)",
                 [JSON.stringify({ ...loggingContext, error: e.message })]);
