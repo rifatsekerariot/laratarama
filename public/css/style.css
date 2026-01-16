@@ -1,0 +1,184 @@
+:root {
+    --bg-color: #0f172a;
+    --text-color: #e2e8f0;
+    --accent-color: #3b82f6;
+    --danger-color: #ef4444;
+    --success-color: #22c55e;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Inter', sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+}
+
+#map {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 0;
+}
+
+/* UI Overlay */
+.ui-layer {
+    position: absolute;
+    z-index: 1000;
+    pointer-events: none; /* Let clicks pass through to map where not interacting */
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+.top-nav {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    pointer-events: auto;
+}
+
+.nav-btn {
+    background: rgba(30, 41, 59, 0.9);
+    border: 1px solid #334155;
+    color: var(--text-color);
+    padding: 10px 20px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+    backdrop-filter: blur(5px);
+    transition: all 0.2s;
+}
+
+.nav-btn:hover, .nav-btn.active {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+}
+
+/* Status Box - Centered */
+#status-box {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(15, 23, 42, 0.95);
+    border: 2px solid var(--accent-color);
+    padding: 20px 40px;
+    border-radius: 12px;
+    text-align: center;
+    pointer-events: auto;
+    display: none; /* Hidden by default */
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+    min-width: 200px;
+}
+
+#status-box h3 {
+    margin: 0 0 10px 0;
+    font-size: 1.2rem;
+}
+
+.loader {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid var(--accent-color);
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 10px auto;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Bottom Controls */
+.bottom-controls {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    pointer-events: auto;
+    margin-bottom: 20px;
+}
+
+.control-btn {
+    border: none;
+    padding: 15px 30px;
+    border-radius: 50px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    transition: transform 0.1s;
+}
+
+.control-btn:active {
+    transform: scale(0.95);
+}
+
+.btn-start {
+    background: var(--success-color);
+    color: white;
+}
+
+.btn-clear {
+    background: var(--danger-color);
+    color: white;
+}
+
+/* 3D Page Overrides */
+#control-panel {
+    background: rgba(15, 23, 42, 0.9);
+    padding: 20px;
+    border-radius: 12px;
+    max-width: 340px;
+    pointer-events: auto;
+}
+
+/* Planner Layout */
+.planner-container {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+}
+
+.sidebar {
+    width: 340px;
+    background: #1e293b;
+    padding: 20px;
+    box-sizing: border-box;
+    overflow-y: auto;
+    z-index: 1001;
+    box-shadow: 2px 0 10px rgba(0,0,0,0.3);
+}
+
+.planner-map {
+    flex-grow: 1;
+    position: relative;
+}
+
+/* Mobile Responsive for Planner */
+@media (max-width: 768px) {
+    .planner-container {
+        flex-direction: column-reverse;
+    }
+    .sidebar {
+        width: 100%;
+        height: 45vh;
+    }
+    .planner-map {
+        height: 55vh;
+    }
+}

@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: ariot_app
+    restart: always
+    ports:
+      - "80:3000"
+    environment:
+      - PORT=3000
+      - DB_HOST=db
+      - DB_USER=ariot
+      - DB_PASSWORD=ariot_secret
+      - DB_NAME=ariot_db
+    depends_on:
+      - db
+
+  db:
+    image: postgres:15-alpine
+    container_name: ariot_db
+    restart: always
+    environment:
+      - POSTGRES_USER=ariot
+      - POSTGRES_PASSWORD=ariot_secret
+      - POSTGRES_DB=ariot_db
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Mount schema to auto-init if empty
+      - ./schema.sql:/docker-entrypoint-initdb.d/init.sql
+
+volumes:
+  pgdata:

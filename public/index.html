@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARIOT - IoT Dashboard</title>
+    <!-- CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="css/style.css">
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+</head>
+
+<body>
+
+    <div id="map"></div>
+
+    <div class="ui-layer">
+        <nav class="top-nav">
+            <span id="app-brand"
+                style="margin-right: 20px; font-weight: bold; font-size: 1.2rem; color: #3b82f6;">ARIOT</span>
+            <a href="planner.html" class="nav-btn">AI Planner</a>
+            <a href="#" class="nav-btn active">Live Map</a>
+            <a href="integrations.html" class="nav-btn">Integrations</a>
+        </nav>
+
+        <div class="bottom-controls">
+            <button id="btn-start" class="control-btn btn-start">
+                <span>▶</span> Start Measurement
+            </button>
+            <button id="btn-clear" class="control-btn btn-clear">
+                <span>🗑</span> Clear Map
+            </button>
+            <button id="btn-export" class="control-btn" style="background: #eab308; color: black;">
+                <span>⬇</span> Export CSV
+            </button>
+        </div>
+
+        <!-- Signal Chart Overlay (Bottom Right) -->
+        <div id="chart-container"
+            style="position: absolute; bottom: 80px; right: 20px; width: 400px; height: 200px; background: rgba(15,23,42,0.9); padding: 10px; border-radius: 8px; border: 1px solid #334155; pointer-events: auto;">
+            <canvas id="signalChart"></canvas>
+        </div>
+    </div>
+
+    <div id="status-box">
+        <div class="loader"></div>
+        <h3 id="status-text">Measuring (0/5)</h3>
+        <p>Please wait for samples...</p>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="js/main.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Entegrasyon Yönetimi</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .container {
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #1e293b;
+            border-radius: 12px;
+        }
+
+        h2 {
+            color: #3b82f6;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            color: #94a3b8;
+            margin-bottom: 5px;
+        }
+
+        input,
+        textarea {
+            width: 100%;
+            padding: 10px;
+            background: #0f172a;
+            border: 1px solid #475569;
+            color: white;
+            border-radius: 6px;
+            box-sizing: border-box;
+        }
+
+        textarea {
+            height: 150px;
+            font-family: monospace;
+        }
+
+        .hint {
+            font-size: 0.8rem;
+            color: #64748b;
+            margin-top: 4px;
+        }
+
+        button {
+            background: #22c55e;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="ui-layer" style="position:relative; pointer-events:auto; height: auto;">
+        <nav class="top-nav" style="margin-top: 20px;">
+            <a href="index.html" class="nav-btn">← Back to Dashboard</a>
+        </nav>
+    </div>
+
+    <div class="container">
+        <h2>Yeni Entegrasyon Ekle</h2>
+        <p>Buradan dış kaynaklardan (örneğin ChirpStack, TTN) veri alacak webhook'ları tanımlayabilirsiniz.</p>
+
+        <form id="integration-form">
+            <div class="form-group">
+                <label>Entegrasyon Adı</label>
+                <input type="text" id="name" placeholder="Örn: ChirpStack Gateway" required>
+            </div>
+
+            <div class="form-group">
+                <label>Webhook Slug (URL)</label>
+                <input type="text" id="slug" placeholder="chirpstack" required>
+                <div class="hint">Veri gönderilecek adres: <span style="color:#e2e8f0;">/webhook/{slug}</span></div>
+            </div>
+
+            <div class="form-group">
+                <label>Javascript Decoder Script</label>
+                <textarea id="script" required>
+// (payload) -> { gw_id, rssi, snr, lat, lng }
+return {
+    gateway_id: payload.gatewayID || 'unknown',
+    rssi: payload.rxInfo ? payload.rxInfo[0].rssi : -100,
+    snr: payload.rxInfo ? payload.rxInfo[0].loRaSNR : 0,
+    latitude: payload.latitude,
+    longitude: payload.longitude
+};
+                </textarea>
+                <div class="hint">Gelen JSON verisini sistem formatına çeviren JS kodu. 'payload' değişkeni girdidir.
+                </div>
+            </div>
+
+            <button type="submit">Entegrasyonu Kaydet</button>
+        </form>
+    </div>
+
+    <script>
+        document.getElementById('integration-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('name').value;
+            const slug = document.getElementById('slug').value;
+            const script = document.getElementById('script').value;
+
+            try {
+                const res = await fetch('/api/integrations', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, slug, script })
+                });
+
+                if (res.ok) {
+                    alert('Entegrasyon Başarıyla Eklendi!');
+                    document.getElementById('integration-form').reset();
+                } else {
+                    alert('Hata!');
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Server Hatası');
+            }
+        });
+    </script>
+</body>
+
+</html>
