@@ -39,11 +39,6 @@ function getColor(rssi) {
     return '#ef4444'; // Red
 }
 
-function getRadius(rssi) {
-    // optional: size by signal? kept constant for now as per circles request
-    return 10;
-}
-
 // Fetch and Draw Points
 async function loadData() {
     try {
@@ -64,7 +59,8 @@ async function loadData() {
                 .bindPopup(`
                 <b>Type:</b> ${point.type}<br>
                 <b>RSSI:</b> ${point.rssi} dBm<br>
-                <b>SNR:</b> ${point.snr} dB
+                <b>SNR:</b> ${point.snr} dB<br>
+                <b>SF:</b> ${point.spreading_factor || point.sf || 'N/A'}
             `)
                 .addTo(pointsLayer);
         });
@@ -174,10 +170,10 @@ async function pollSession() {
             statusText.innerText = 'Complete!';
 
             // Allow user to save
-            const note = prompt(`Measurement Complete!\nAvg RSSI: ${data.avg_rssi}\nAvg SNR: ${data.avg_snr}\n\nEnter a note to save:`);
+            const note = prompt(`Measurement Complete!\nAvg RSSI: ${data.avg_rssi}\nAvg SNR: ${data.avg_snr}\nSF: ${data.sf || 'N/A'}\n\nEnter a note to save:`);
 
             if (note !== null) {
-                savePoint(data.avg_rssi, data.avg_snr, note);
+                savePoint(data.avg_rssi, data.avg_snr, data.sf, note);
             } else {
                 statusBox.style.display = 'none';
             }
@@ -187,7 +183,7 @@ async function pollSession() {
     }
 }
 
-async function savePoint(rssi, snr, note) {
+async function savePoint(rssi, snr, sf, note) {
     // Get current location from marker or navigator
     const lat = userLocationMarker.getLatLng().lat;
     const lng = userLocationMarker.getLatLng().lng;
@@ -205,6 +201,7 @@ async function savePoint(rssi, snr, note) {
             body: JSON.stringify({
                 avg_rssi: rssi,
                 avg_snr: snr,
+                sf: sf,
                 lat: lat,
                 lng: lng,
                 note: note

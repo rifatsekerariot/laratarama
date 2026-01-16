@@ -59,11 +59,104 @@ async function ensureSchema() {
                 note TEXT,
                 avg_rssi NUMERIC,
                 avg_snr NUMERIC,
+                spreading_factor NUMERIC,
                 latitude DOUBLE PRECISION,
                 longitude DOUBLE PRECISION,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
             CREATE TABLE IF NOT EXISTS planned_gateways (
+// ... (Lines in between match existing ensureSchema structure) ...
+// Dynamic Webhook Handler
+const processWebhook = async (slug, req, res) => {
+     const loggingContext = { slug, payload: req.body };
+
+    try {
+        const result = await pool.query('SELECT decoder_script FROM integrations WHERE endpoint_slug = $1', [slug]);
+        if (result.rows.length === 0) {
+            await pool.query("INSERT INTO system_logs (source, level, message, details) VALUES ('webhook', 'warn', 'Endpoint Not Found', $1)", [JSON.stringify(loggingContext)]);
+            return res.status(404).send('Not Found');
+        }
+        
+        const parserFunc = new Function('payload', result.rows[0].decoder_script);
+        let parsed;
+        try { 
+            parsed = parserFunc(req.body); 
+        } catch(e) { 
+            await pool.query("INSERT INTO system_logs (source, level, message, details) VALUES ('webhook', 'error', 'Decoder Script Failed', $1)", 
+                [JSON.stringify({...loggingContext, error: e.message})]);
+            return res.status(400).send('Decoder Error'); 
+        }
+        
+        // We now accept data even if location is missing (User will add it via Dashboard)
+        const lat = parsed.latitude || parsed.lat || null;
+        const lng = parsed.longitude || parsed.lng || parsed.lon || null;
+        const sf = parsed.spreadingFactor || parsed.sf || parsed.spreading_factor || null;
+        const rssi = parsed.rssi || -120;
+        const snr = parsed.snr || 0;
+        
+        // Save to DB
+        await pool.query('INSERT INTO measurements (gateway_id, rssi, snr, frequency, spreading_factor, latitude, longitude) VALUES ($1,$2,$3,$4,$5,$6, $7)',
+            [parsed.gateway_id||'gw', rssi, snr, parsed.frequency||868, sf, lat, lng]);
+        
+        const logMsg = (lat && lng) ? 'Data Processed Successfully' : 'Data Received (Waiting for Location Fix)';
+        await pool.query("INSERT INTO system_logs (source, level, message, details) VALUES ('webhook', 'info', $1, $2)", 
+            [logMsg, JSON.stringify({ ...loggingContext, parsed })]);
+            
+        res.send('OK');
+
+    } catch (e) {
+        console.error(e);
+        await pool.query("INSERT INTO system_logs (source, level, message, details) VALUES ('webhook', 'error', 'System Error', $1)", 
+             [JSON.stringify({ ...loggingContext, error: e.message })]);
+        res.status(500).send('Error');
+    }
+};
+
+// ...
+
+// Session Actions
+// ...
+app.get('/api/poll-session', async (req, res) => {
+    const sessionId = req.session.userId;
+    if (!activeSessions[sessionId]) return res.status(400).json({ error: 'No active session' });
+    
+    // DB Polling logic
+    try {
+        const startTime = activeSessions[sessionId].startTime;
+        // Fetch SF along with other metrics
+        const result = await pool.query('SELECT rssi, snr, spreading_factor as sf FROM measurements WHERE created_at > $1 ORDER BY created_at ASC', [startTime]);
+        
+        // Filter valid RSSI readings
+        const readings = result.rows.filter(r => r.rssi !== null && !isNaN(parseFloat(r.rssi)));
+        
+        if (readings.length >= 3) {
+            const avgRssi = readings.slice(0,3).reduce((a,b)=>a+parseFloat(b.rssi),0)/3;
+            const avgSnr = readings.slice(0,3).reduce((a,b)=>a+parseFloat(b.snr),0)/3;
+            // Mode or Avg for SF? Usually SF is constant. Let's take the first one or Max.
+            const avgSf = readings[0].sf || 7; 
+            
+            delete activeSessions[sessionId];
+            res.json({ status: 'complete', avg_rssi: avgRssi.toFixed(2), avg_snr: avgSnr.toFixed(2), sf: avgSf });
+        } else {
+            res.json({ status: 'pending', count: readings.length, required: 3 });
+        }
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: 'Polling error' });
+    }
+});
+
+app.post('/api/save-point', async (req, res) => {
+    const { avg_rssi, avg_snr, sf, lat, lng, note } = req.body;
+    try {
+        await pool.query('INSERT INTO saved_points (avg_rssi, avg_snr, spreading_factor, latitude, longitude, note) VALUES ($1,$2,$3,$4,$5,$6)', 
+            [avg_rssi, avg_snr, sf || 7, lat, lng, note || 'Manual']);
+        res.json({ success: true });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: 'Save failed' });
+    }
+});
                 id SERIAL PRIMARY KEY,
                 latitude DOUBLE PRECISION,
                 longitude DOUBLE PRECISION,
@@ -91,6 +184,13 @@ async function ensureSchema() {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
+
+        // Migrations for existing tables
+        await pool.query(`
+            ALTER TABLE saved_points ADD COLUMN IF NOT EXISTS spreading_factor NUMERIC;
+            ALTER TABLE measurements ADD COLUMN IF NOT EXISTS spreading_factor NUMERIC;
+        `);
+
         console.log('✅ Schema Verified. Tables are ready.');
     } catch (e) {
         console.error('❌ Schema Sync Failed:', e.message);
