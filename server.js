@@ -34,16 +34,24 @@ const pool = new Pool({
     port: process.env.DB_PORT || 5432,
 });
 
-pool.connect().then(client => {
-    console.log('✅ Connected to PostgreSQL Database');
-    client.release();
-}).catch(err => {
-    console.error('❌ CRITICAL: PostgreSQL Connection Failed:', err.message);
-    process.exit(1);
-});
+const connectWithRetry = () => {
+    console.log('⏳ Attempting to connect to PostgreSQL...');
+    pool.connect().then(client => {
+        console.log('✅ Connected to PostgreSQL Database');
+        client.release();
+    }).catch(err => {
+        console.error('❌ Connection Failed:', err.message);
+        console.log('🔄 Retrying in 5 seconds...');
+        setTimeout(connectWithRetry, 5000);
+    });
+};
+
+connectWithRetry();
 
 pool.on('error', (err) => {
     console.error('Unexpected error on idle client', err);
+    // Don't exit immediately, let the reconnection logic (if any) or Docker restart handle it
+    // But for pool 'error', usually the client is dead. 
     process.exit(-1);
 });
 
