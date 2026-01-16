@@ -48,6 +48,10 @@ async function loadData() {
         pointsLayer.clearLayers();
 
         data.forEach(point => {
+            const isSaved = point.type === 'saved';
+            // Only 'saved' points can be deleted
+            const deleteBtn = isSaved ? `<button class="popup-btn-delete" onclick="window.deletePoint(${point.id})">Sil</button>` : '';
+
             L.circleMarker([point.latitude, point.longitude], {
                 radius: 8,
                 fillColor: getColor(point.rssi),
@@ -57,10 +61,27 @@ async function loadData() {
                 fillOpacity: 0.7
             })
                 .bindPopup(`
-                <b>Type:</b> ${point.type}<br>
-                <b>RSSI:</b> ${point.rssi} dBm<br>
-                <b>SNR:</b> ${point.snr} dB<br>
-                <b>SF:</b> ${point.spreading_factor || point.sf || 'N/A'}
+                <div class="custom-popup">
+                    <div class="popup-header">
+                        <span class="popup-tag ${point.type}">${point.type.toUpperCase()}</span>
+                        <span class="popup-time">${new Date(point.created_at).toLocaleTimeString()}</span>
+                    </div>
+                    <div class="popup-stats">
+                        <div class="stat-item">
+                            <span class="stat-label">RSSI</span>
+                            <span class="stat-value" style="color:${getColor(point.rssi)}">${point.rssi} dBm</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">SNR</span>
+                            <span class="stat-value">${point.snr} dB</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">SF</span>
+                            <span class="stat-value">${point.spreading_factor || point.sf || '-'}</span>
+                        </div>
+                    </div>
+                    ${deleteBtn}
+                </div>
             `)
                 .addTo(pointsLayer);
         });
@@ -68,6 +89,23 @@ async function loadData() {
         console.error('Error loading data:', error);
     }
 }
+
+// Global Delete Function used in Popups
+window.deletePoint = async (id) => {
+    if (!confirm('Bu kaydı silmek istediğinize emin misiniz?')) return;
+    try {
+        const res = await fetch(`/api/points/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+            loadData(); // Refresh map
+        } else {
+            alert('Silinemedi.');
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Hata oluştu.');
+    }
+};
 
 // User Location
 if ('geolocation' in navigator) {
@@ -169,14 +207,9 @@ async function pollSession() {
             clearInterval(pollingInterval);
             statusText.innerText = 'Complete!';
 
-            // Allow user to save
-            const note = prompt(`Measurement Complete!\nAvg RSSI: ${data.avg_rssi}\nAvg SNR: ${data.avg_snr}\nSF: ${data.sf || 'N/A'}\n\nEnter a note to save:`);
-
-            if (note !== null) {
-                savePoint(data.avg_rssi, data.avg_snr, data.sf, note);
-            } else {
-                statusBox.style.display = 'none';
-            }
+            // Auto-Save without prompt
+            // Note is empty string by default
+            savePoint(data.avg_rssi, data.avg_snr, data.sf, '');
         }
     } catch (e) {
         console.error(e);
@@ -210,9 +243,9 @@ async function savePoint(rssi, snr, sf, note) {
 
         const result = await res.json();
         if (result.success) {
-            alert('Saved successfully!');
+            // alert('Saved successfully!'); // Removed alert to be less intrusive
             statusBox.style.display = 'none';
-            loadData(); // Refresh map
+            loadData(); // Refresh map immediately
         }
     } catch (e) {
         alert('Error saving');

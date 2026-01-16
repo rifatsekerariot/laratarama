@@ -152,6 +152,7 @@
                         <label>Javascript Decoder</label>
                         <textarea id="script" required>
 // Universal Decoder for ChirpStack / TTN / Custom
+// v2.1 (Fixes SNR & Parse)
 // (payload) -> { gw_id, rssi, snr, lat, lng, sf }
 
 // Helper to pick first non-undefined value
@@ -181,6 +182,8 @@ return {
     snr: pick(
         payload.snr, 
         first(payload.rx_info).snr, 
+        first(payload.rx_info).loRaSNR,
+        first(payload.rxInfo).snr, 
         first(payload.rxInfo).loRaSNR, 
         0
     ),

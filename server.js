@@ -307,6 +307,20 @@ app.post('/api/save-point', async (req, res) => {
     }
 });
 
+app.delete('/api/points/:id', async (req, res) => {
+    if (!req.session.userId) return res.status(401).send('Unauthorized');
+    const { id } = req.params;
+    try {
+        await pool.query('DELETE FROM saved_points WHERE id = $1', [id]);
+        // Also allow deleting "live" measurements? Usually unwanted, but let's stick to saved_points for now as requested.
+        // If user wants to delete live points, they usually clear all. 
+        // Let's assume this is for "saved" points only for now.
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: 'Delete failed' });
+    }
+});
+
 // Planner Save
 app.post('/api/save-scenario', async (req, res) => {
     const { gateways } = req.body;
