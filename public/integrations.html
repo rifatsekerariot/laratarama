@@ -157,18 +157,55 @@
 // Helper to pick first non-undefined value
 const pick = (...vals) => vals.find(v => v !== undefined && v !== null);
 
+// Helper to safely access array index 0
+const first = (arr) => (arr && arr.length > 0) ? arr[0] : {};
+
 return {
-    gateway_id: pick(payload.gatewayId, payload.gatewayID, payload.rxInfo?.[0]?.gatewayID, 'gw'),
+    gateway_id: pick(
+        payload.gatewayId, 
+        payload.gatewayID, 
+        first(payload.rx_info).gatewayId, 
+        first(payload.rxInfo).gatewayID, 
+        'gw'
+    ),
     
     // Signal Metrics
-    // Check root 'snr', 'loRaSNR', then nested in rxInfo
-    rssi: pick(payload.rssi, payload.rxInfo?.[0]?.rssi, -120),
-    snr: pick(payload.snr, payload.loRaSNR, payload.rxInfo?.[0]?.loRaSNR, 0),
-    spreadingFactor: pick(payload.spreadingFactor, payload.sf, payload.txInfo?.modulation?.lora?.spreadingFactor, 7),
+    // Check: 1. Root, 2. rx_info (snake), 3. rxInfo (camel)
+    rssi: pick(
+        payload.rssi, 
+        first(payload.rx_info).rssi, 
+        first(payload.rxInfo).rssi, 
+        -120
+    ),
+    
+    snr: pick(
+        payload.snr, 
+        first(payload.rx_info).snr, 
+        first(payload.rxInfo).loRaSNR, 
+        0
+    ),
+    
+    spreadingFactor: pick(
+        payload.spreadingFactor, 
+        payload.sf, 
+        payload.tx_info?.modulation?.lora?.spreadingFactor, 
+        payload.txInfo?.modulation?.lora?.spreadingFactor, 
+        7
+    ),
     
     // Location
-    latitude: pick(payload.latitude, payload.lat, payload.location?.latitude, payload.rxInfo?.[0]?.location?.latitude),
-    longitude: pick(payload.longitude, payload.lng, payload.location?.longitude, payload.rxInfo?.[0]?.location?.longitude)
+    latitude: pick(
+        payload.latitude, payload.lat, 
+        payload.location?.latitude, 
+        first(payload.rx_info).location?.latitude, 
+        first(payload.rxInfo).location?.latitude
+    ),
+    longitude: pick(
+        payload.longitude, payload.lng, 
+        payload.location?.longitude, 
+        first(payload.rx_info).location?.longitude, 
+        first(payload.rxInfo).location?.longitude
+    )
 };</textarea>
                     </div>
                     <button type="submit">Entegrasyonu Kaydet</button>
