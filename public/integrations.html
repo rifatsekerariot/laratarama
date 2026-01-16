@@ -151,39 +151,44 @@
                     <div class="form-group">
                         <label>Javascript Decoder</label>
                         <textarea id="script" required>
-// Universal Decoder - V3.0 (Extended Telemetry)
-// (payload) -> { gw_id, rssi, snr, lat, lng, sf, bw, cr, crc, channel, adr }
+// Universal Decoder - V3.1 (Explicit Path Mapping)
+// (payload) -> { gw_id, rssi, snr, sf, bw, cr, freq, crc, ch, adr }
 
-const pick = (...vals) => vals.find(v => v !== undefined && v !== null);
-const first = (arr) => (arr && arr.length > 0) ? arr[0] : {};
+// 1. Extract Core Objects (Handle snake_case and camelCase)
+const rxArr = payload.rx_info || payload.rxInfo || [];
+const rx = (rxArr.length > 0) ? rxArr[0] : {};
 
-// ChirpStack / TTN Payload Structure Helpers
-const rx = first(payload.rx_info) || first(payload.rxInfo) || {};
 const tx = payload.tx_info || payload.txInfo || {};
-const lora = tx.modulation?.lora || {};
-const meta = payload.phyPayload || payload.phy_payload || {}; // Sometimes present
+const lora = (tx.modulation && tx.modulation.lora) || {};
+
+// 2. Extract Deeply Nested Metadata (ADR from phy_payload)
+const phy = payload.phy_payload || payload.phyPayload || {};
+const fctrl = (phy.payload && phy.payload.fhdr && phy.payload.fhdr.f_ctrl) || {};
+
+// 3. Helper for safe fallback
+const val = (v, def) => (v !== undefined && v !== null) ? v : def;
 
 return {
-    gateway_id: pick(payload.gatewayId, payload.gatewayID, rx.gatewayId, rx.gatewayID, 'gw'),
+    gateway_id: val(rx.gatewayId, val(rx.gatewayID, val(payload.gatewayId, 'gw'))),
     
     // Signal
-    rssi: pick(payload.rssi, rx.rssi, -120),
-    snr: pick(payload.snr, rx.snr, rx.loRaSNR, 0),
+    rssi: val(rx.rssi, val(payload.rssi, -120)),
+    snr: val(rx.snr, val(rx.loRaSNR, val(payload.snr, 0))),
     
-    // Radio Params
-    spreadingFactor: pick(payload.spreadingFactor, payload.sf, lora.spreadingFactor, 7),
-    bandwidth: pick(payload.bandwidth, payload.bw, lora.bandwidth),
-    codeRate: pick(payload.codeRate, payload.cr, lora.codeRate),
-    frequency: pick(payload.frequency, payload.freq, tx.frequency),
+    // Radio Params (From tx_info.modulation.lora)
+    spreadingFactor: val(lora.spreadingFactor, val(payload.spreadingFactor, val(payload.sf, 7))),
+    bandwidth: val(lora.bandwidth, val(payload.bandwidth, val(payload.bw, 0))),
+    codeRate: val(lora.codeRate, val(payload.codeRate, val(payload.cr, ''))),
+    frequency: val(tx.frequency, val(payload.frequency, 0)),
     
     // Network/Quality
-    crc_status: pick(payload.crcStatus, rx.crcStatus),
-    channel: pick(payload.channel, rx.channel),
-    adr: pick(payload.adr, payload.adr_flag, meta.adr),
+    crc_status: val(rx.crcStatus, val(payload.crcStatus, '')),
+    channel: val(rx.channel, val(payload.channel, 0)),
+    adr: val(fctrl.adr, val(payload.adr, false)), // Extract from f_ctrl.adr
     
     // Location
-    latitude: pick(payload.latitude, payload.lat, payload.location?.latitude, rx.location?.latitude),
-    longitude: pick(payload.longitude, payload.lng, payload.location?.longitude, rx.location?.longitude)
+    latitude: val(payload.latitude, val(rx.location?.latitude, 0)),
+    longitude: val(payload.longitude, val(rx.location?.longitude, 0))
 };</textarea>
                     </div>
                     <button type="submit">Entegrasyonu Kaydet</button>
