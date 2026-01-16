@@ -371,8 +371,7 @@ app.get('/api/system-logs', async (req, res) => {
 });
 
 // Dynamic Webhook Handler
-app.post('/webhook/:slug', async (req, res) => {
-    const { slug } = req.params;
+const processWebhook = async (slug, req, res) => {
     const loggingContext = { slug, payload: req.body };
 
     try {
@@ -411,6 +410,30 @@ app.post('/webhook/:slug', async (req, res) => {
             [JSON.stringify({ ...loggingContext, error: e.message })]);
         res.status(500).send('Error');
     }
+};
+
+// Root Webhook Handler (Fallback for /webhook)
+// Looks for an integration named 'webhook' or 'default' or 'chirpstack'
+app.post('/webhook', async (req, res) => {
+    // Try to find a logical default
+    try {
+        // Preference order: 'webhook' -> 'chirpstack' -> 'default' -> First available
+        const result = await pool.query("SELECT endpoint_slug FROM integrations WHERE endpoint_slug IN ('webhook', 'chirpstack', 'default') ORDER BY CASE endpoint_slug WHEN 'webhook' THEN 1 WHEN 'chirpstack' THEN 2 ELSE 3 END LIMIT 1");
+
+        if (result.rows.length > 0) {
+            return processWebhook(result.rows[0].endpoint_slug, req, res);
+        } else {
+            // No matching default, log warning
+            await pool.query("INSERT INTO system_logs (source, level, message, details) VALUES ('webhook', 'warn', 'Root Webhook Hit but No Default Integration Found', $1)", [JSON.stringify(req.body)]);
+            res.status(404).send('No integration configured for root /webhook. Please create an integration with slug "webhook" or "chirpstack".');
+        }
+    } catch (e) {
+        res.status(500).send('System Error');
+    }
+});
+
+app.post('/webhook/:slug', async (req, res) => {
+    processWebhook(req.params.slug, req, res);
 });
 
 // Start
