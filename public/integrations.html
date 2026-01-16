@@ -182,7 +182,8 @@ return {
     adr: pick(payload.adr, payload.adr_flag, meta.adr),
     
     // Location
-    )
+    latitude: pick(payload.latitude, payload.lat, payload.location?.latitude, rx.location?.latitude),
+    longitude: pick(payload.longitude, payload.lng, payload.location?.longitude, rx.location?.longitude)
 };</textarea>
                     </div>
                     <button type="submit">Entegrasyonu Kaydet</button>
