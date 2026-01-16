@@ -77,7 +77,31 @@ async function loadData() {
                         </div>
                         <div class="stat-item">
                             <span class="stat-label">SF</span>
-                            <span class="stat-value">${point.spreading_factor || point.sf || '-'}</span>
+                            <span class="stat-value">${point.spreading_factor || '-'}</span>
+                        </div>
+                         <div class="stat-item">
+                            <span class="stat-label">BW</span>
+                            <span class="stat-value">${point.bandwidth ? (point.bandwidth / 1000) + 'k' : '-'}</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">CR</span>
+                            <span class="stat-value">${point.code_rate || '-'}</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">FREQ</span>
+                            <span class="stat-value">${point.frequency ? (point.frequency / 1000000).toFixed(1) : '-'}</span>
+                        </div>
+                         <div class="stat-item">
+                            <span class="stat-label">GW</span>
+                            <span class="stat-value" title="${point.gateway_id}">${point.gateway_id ? point.gateway_id.substring(0, 6) + '...' : '-'}</span>
+                        </div>
+                         <div class="stat-item">
+                            <span class="stat-label">CRC</span>
+                            <span class="stat-value">${point.crc_status === 'CRC_OK' ? 'OK' : (point.crc_status || '-')}</span>
+                        </div>
+                         <div class="stat-item">
+                            <span class="stat-label">CH / ADR</span>
+                            <span class="stat-value">${point.channel || '-'}/${point.adr ? 'ON' : 'OFF'}</span>
                         </div>
                     </div>
                     ${deleteBtn}

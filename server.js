@@ -50,6 +50,11 @@ async function ensureSchema() {
                 snr NUMERIC,
                 frequency NUMERIC,
                 spreading_factor NUMERIC,
+                bandwidth NUMERIC,
+                code_rate VARCHAR(20),
+                crc_status VARCHAR(20),
+                channel INTEGER,
+                adr BOOLEAN,
                 latitude DOUBLE PRECISION,
                 longitude DOUBLE PRECISION,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -60,6 +65,13 @@ async function ensureSchema() {
                 avg_rssi NUMERIC,
                 avg_snr NUMERIC,
                 spreading_factor NUMERIC,
+                frequency NUMERIC,
+                bandwidth NUMERIC,
+                code_rate VARCHAR(20),
+                crc_status VARCHAR(20),
+                channel INTEGER,
+                adr BOOLEAN,
+                gateway_id VARCHAR(50),
                 latitude DOUBLE PRECISION,
                 longitude DOUBLE PRECISION,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -93,10 +105,23 @@ async function ensureSchema() {
             );
         `);
 
-        // Migrations for existing tables (safe to run always)
+        // Migrations for existing tables (Adding new columns)
         await pool.query(`
             ALTER TABLE saved_points ADD COLUMN IF NOT EXISTS spreading_factor NUMERIC;
+            ALTER TABLE saved_points ADD COLUMN IF NOT EXISTS frequency NUMERIC;
+            ALTER TABLE saved_points ADD COLUMN IF NOT EXISTS bandwidth NUMERIC;
+            ALTER TABLE saved_points ADD COLUMN IF NOT EXISTS code_rate VARCHAR(20);
+            ALTER TABLE saved_points ADD COLUMN IF NOT EXISTS crc_status VARCHAR(20);
+            ALTER TABLE saved_points ADD COLUMN IF NOT EXISTS channel INTEGER;
+            ALTER TABLE saved_points ADD COLUMN IF NOT EXISTS adr BOOLEAN;
+            ALTER TABLE saved_points ADD COLUMN IF NOT EXISTS gateway_id VARCHAR(50);
+
             ALTER TABLE measurements ADD COLUMN IF NOT EXISTS spreading_factor NUMERIC;
+            ALTER TABLE measurements ADD COLUMN IF NOT EXISTS bandwidth NUMERIC;
+            ALTER TABLE measurements ADD COLUMN IF NOT EXISTS code_rate VARCHAR(20);
+            ALTER TABLE measurements ADD COLUMN IF NOT EXISTS crc_status VARCHAR(20);
+            ALTER TABLE measurements ADD COLUMN IF NOT EXISTS channel INTEGER;
+            ALTER TABLE measurements ADD COLUMN IF NOT EXISTS adr BOOLEAN;
         `);
 
         console.log('✅ Schema Verified. Tables are ready.');
@@ -227,14 +252,16 @@ app.get('/api/export-csv', async (req, res) => {
     if (!req.session.userId) return res.status(401).send('Unauthorized');
     try {
         const query = `
-            SELECT 'live' as type, gateway_id, rssi, snr, spreading_factor, latitude, longitude, created_at FROM measurements
+            SELECT 'live' as type, gateway_id, rssi, snr, spreading_factor, bandwidth, code_rate, crc_status, channel, adr, latitude, longitude, created_at FROM measurements
             UNION ALL
-            SELECT 'saved' as type, 'manual', avg_rssi, avg_snr, spreading_factor, latitude, longitude, created_at FROM saved_points
+            SELECT 'saved' as type, gateway_id, avg_rssi as rssi, avg_snr as snr, spreading_factor, bandwidth, code_rate, crc_status, channel, adr, latitude, longitude, created_at FROM saved_points
         `;
         const result = await pool.query(query);
-        const rows = result.rows.map(r => `${r.type},${r.gateway_id || 'manual'},${r.rssi},${r.snr},${r.spreading_factor || ''},${r.latitude},${r.longitude},${r.created_at}`);
+        const rows = result.rows.map(r =>
+            `${r.type},${r.gateway_id || 'manual'},${r.rssi},${r.snr},${r.spreading_factor || ''},${r.bandwidth || ''},${r.code_rate || ''},${r.crc_status || ''},${r.channel || ''},${r.adr || ''},${r.latitude},${r.longitude},${r.created_at}`
+        );
 
-        const csvContent = "type,gateway,rssi,snr,sf,latitude,longitude,timestamp\n" + rows.join("\n");
+        const csvContent = "type,gateway,rssi,snr,sf,bw,cr,crc,channel,adr,latitude,longitude,timestamp\n" + rows.join("\n");
         res.header('Content-Type', 'text/csv');
         res.attachment('ariot_data.csv');
         res.send(csvContent);
@@ -247,10 +274,10 @@ app.get('/api/export-csv', async (req, res) => {
 app.get('/api/get-all-data', async (req, res) => {
     try {
         const query = `
-            SELECT id, 'live' as type, rssi, snr, spreading_factor, latitude, longitude, created_at 
+            SELECT id, 'live' as type, rssi, snr, spreading_factor, bandwidth, code_rate, crc_status, channel, adr, latitude, longitude, created_at 
             FROM measurements WHERE latitude IS NOT NULL
             UNION ALL
-            SELECT id, 'saved' as type, avg_rssi as rssi, avg_snr as snr, spreading_factor, latitude, longitude, created_at 
+            SELECT id, 'saved' as type, avg_rssi as rssi, avg_snr as snr, spreading_factor, bandwidth, code_rate, crc_status, channel, adr, latitude, longitude, created_at 
             FROM saved_points WHERE latitude IS NOT NULL
             ORDER BY created_at DESC
         `;
@@ -277,17 +304,30 @@ app.get('/api/poll-session', async (req, res) => {
     try {
         // Find NEW measurements (regardless of location)
         const startTime = activeSessions[sessionId].startTime;
-        const result = await pool.query('SELECT rssi, snr, spreading_factor as sf FROM measurements WHERE created_at > $1 ORDER BY created_at ASC', [startTime]);
+        const result = await pool.query('SELECT rssi, snr, spreading_factor, bandwidth, code_rate, crc_status, channel, adr, gateway_id FROM measurements WHERE created_at > $1 ORDER BY created_at ASC', [startTime]);
 
         const readings = result.rows.filter(r => r.rssi !== null && !isNaN(parseFloat(r.rssi)));
 
         if (readings.length >= 3) { // Require 3 data points
             const avgRssi = readings.slice(0, 3).reduce((a, b) => a + parseFloat(b.rssi), 0) / 3;
             const avgSnr = readings.slice(0, 3).reduce((a, b) => a + parseFloat(b.snr), 0) / 3;
-            const avgSf = readings[0].sf || 7;
+
+            // For static params, take the most recent (or first)
+            const last = readings[readings.length - 1] || {};
 
             delete activeSessions[sessionId];
-            res.json({ status: 'complete', avg_rssi: avgRssi.toFixed(2), avg_snr: avgSnr.toFixed(2), sf: avgSf });
+            res.json({
+                status: 'complete',
+                avg_rssi: avgRssi.toFixed(2),
+                avg_snr: avgSnr.toFixed(2),
+                sf: last.spreading_factor || 7,
+                bw: last.bandwidth,
+                cr: last.code_rate,
+                crc: last.crc_status,
+                channel: last.channel,
+                adr: last.adr,
+                gw: last.gateway_id
+            });
         } else {
             res.json({ status: 'pending', count: readings.length, required: 3 });
         }
@@ -297,10 +337,10 @@ app.get('/api/poll-session', async (req, res) => {
 });
 
 app.post('/api/save-point', async (req, res) => {
-    const { avg_rssi, avg_snr, sf, lat, lng, note } = req.body;
+    const { avg_rssi, avg_snr, sf, bw, cr, crc, channel, adr, gw, lat, lng, note } = req.body;
     try {
-        await pool.query('INSERT INTO saved_points (avg_rssi, avg_snr, spreading_factor, latitude, longitude, note) VALUES ($1,$2,$3,$4,$5,$6)',
-            [avg_rssi, avg_snr, sf || 7, lat, lng, note || 'Manual']);
+        await pool.query('INSERT INTO saved_points (avg_rssi, avg_snr, spreading_factor, bandwidth, code_rate, crc_status, channel, adr, gateway_id, latitude, longitude, note) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, $12)',
+            [avg_rssi, avg_snr, sf || 7, bw, cr, crc, channel, adr, gw, lat, lng, note || '']);
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: 'Save failed' });

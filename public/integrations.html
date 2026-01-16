@@ -151,63 +151,37 @@
                     <div class="form-group">
                         <label>Javascript Decoder</label>
                         <textarea id="script" required>
-// Universal Decoder for ChirpStack / TTN / Custom
-// v2.1 (Fixes SNR & Parse)
-// (payload) -> { gw_id, rssi, snr, lat, lng, sf }
+// Universal Decoder - V3.0 (Extended Telemetry)
+// (payload) -> { gw_id, rssi, snr, lat, lng, sf, bw, cr, crc, channel, adr }
 
-// Helper to pick first non-undefined value
 const pick = (...vals) => vals.find(v => v !== undefined && v !== null);
-
-// Helper to safely access array index 0
 const first = (arr) => (arr && arr.length > 0) ? arr[0] : {};
 
+// ChirpStack / TTN Payload Structure Helpers
+const rx = first(payload.rx_info) || first(payload.rxInfo) || {};
+const tx = payload.tx_info || payload.txInfo || {};
+const lora = tx.modulation?.lora || {};
+const meta = payload.phyPayload || payload.phy_payload || {}; // Sometimes present
+
 return {
-    gateway_id: pick(
-        payload.gatewayId, 
-        payload.gatewayID, 
-        first(payload.rx_info).gatewayId, 
-        first(payload.rxInfo).gatewayID, 
-        'gw'
-    ),
+    gateway_id: pick(payload.gatewayId, payload.gatewayID, rx.gatewayId, rx.gatewayID, 'gw'),
     
-    // Signal Metrics
-    // Check: 1. Root, 2. rx_info (snake), 3. rxInfo (camel)
-    rssi: pick(
-        payload.rssi, 
-        first(payload.rx_info).rssi, 
-        first(payload.rxInfo).rssi, 
-        -120
-    ),
+    // Signal
+    rssi: pick(payload.rssi, rx.rssi, -120),
+    snr: pick(payload.snr, rx.snr, rx.loRaSNR, 0),
     
-    snr: pick(
-        payload.snr, 
-        first(payload.rx_info).snr, 
-        first(payload.rx_info).loRaSNR,
-        first(payload.rxInfo).snr, 
-        first(payload.rxInfo).loRaSNR, 
-        0
-    ),
+    // Radio Params
+    spreadingFactor: pick(payload.spreadingFactor, payload.sf, lora.spreadingFactor, 7),
+    bandwidth: pick(payload.bandwidth, payload.bw, lora.bandwidth),
+    codeRate: pick(payload.codeRate, payload.cr, lora.codeRate),
+    frequency: pick(payload.frequency, payload.freq, tx.frequency),
     
-    spreadingFactor: pick(
-        payload.spreadingFactor, 
-        payload.sf, 
-        payload.tx_info?.modulation?.lora?.spreadingFactor, 
-        payload.txInfo?.modulation?.lora?.spreadingFactor, 
-        7
-    ),
+    // Network/Quality
+    crc_status: pick(payload.crcStatus, rx.crcStatus),
+    channel: pick(payload.channel, rx.channel),
+    adr: pick(payload.adr, payload.adr_flag, meta.adr),
     
     // Location
-    latitude: pick(
-        payload.latitude, payload.lat, 
-        payload.location?.latitude, 
-        first(payload.rx_info).location?.latitude, 
-        first(payload.rxInfo).location?.latitude
-    ),
-    longitude: pick(
-        payload.longitude, payload.lng, 
-        payload.location?.longitude, 
-        first(payload.rx_info).location?.longitude, 
-        first(payload.rxInfo).location?.longitude
     )
 };</textarea>
                     </div>
