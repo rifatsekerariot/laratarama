@@ -156,37 +156,7 @@ const btnClear = document.getElementById('btn-clear');
 const btnExport = document.getElementById('btn-export');
 
 // Chart Initialization
-const ctx = document.getElementById('signalChart').getContext('2d');
-const signalChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-        labels: [],
-        datasets: [{
-            label: 'RSSI History',
-            data: [],
-            borderColor: '#3b82f6',
-            backgroundColor: 'rgba(59, 130, 246, 0.1)',
-            tension: 0.1,
-            fill: true
-        }]
-    },
-    options: {
-        responsive: true,
-        plugins: {
-            legend: { labels: { color: 'white' } }
-        },
-        scales: {
-            y: {
-                beginAtZero: false,
-                ticks: { color: '#94a3b8' },
-                grid: { color: '#334155' }
-            },
-            x: {
-                ticks: { display: false } // Hide timestamps for clean look
-            }
-        }
-    }
-});
+
 
 // Controls
 btnStart.addEventListener('click', startMeasurement);

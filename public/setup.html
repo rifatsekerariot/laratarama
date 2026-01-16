@@ -6,104 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistem Kurulum Sihirbazı</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: 'Inter', sans-serif;
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-            color: #e2e8f0;
-            height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .setup-card {
-            background: rgba(30, 41, 59, 0.95);
-            padding: 40px;
-            border-radius: 16px;
-            width: 100%;
-            max-width: 450px;
-            border: 1px solid #334155;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
-        }
-
-        h1 {
-            color: #3b82f6;
-            margin-top: 0;
-            text-align: center;
-        }
-
-        p {
-            color: #94a3b8;
-            text-align: center;
-            margin-bottom: 30px;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-        }
-
-        input {
-            width: 100%;
-            padding: 12px;
-            background: #0f172a;
-            border: 1px solid #475569;
-            color: white;
-            border-radius: 8px;
-            box-sizing: border-box;
-            font-size: 1rem;
-        }
-
-        input:focus {
-            border-color: #3b82f6;
-            outline: none;
-        }
-
-        button {
-            width: 100%;
-            padding: 15px;
-            background: #22c55e;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 1.1rem;
-            font-weight: bold;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        button:hover {
-            background: #16a34a;
-        }
-
-        .setup-steps {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 20px;
-        }
-
-        .step {
-            width: 30%;
-            height: 4px;
-            background: #334155;
-            border-radius: 2px;
-        }
-
-        .step.active {
-            background: #3b82f6;
-        }
-    </style>
+    <link rel="stylesheet" href="css/style.css">
 </head>
 
-<body>
+<body class="setup-page">
     <div class="setup-card">
         <div class="setup-steps">
             <div class="step active"></div>
