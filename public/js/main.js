@@ -233,14 +233,14 @@ async function pollSession() {
 
             // Auto-Save without prompt
             // Note is empty string by default
-            savePoint(data.avg_rssi, data.avg_snr, data.sf, data.bw, data.cr, data.crc, data.channel, data.adr, data.gw, '');
+            savePoint(data.avg_rssi, data.avg_snr, data.sf, data.bw, data.cr, data.freq, data.crc, data.channel, data.adr, data.gw, '');
         }
     } catch (e) {
         console.error(e);
     }
 }
 
-async function savePoint(rssi, snr, sf, bw, cr, crc, channel, adr, gw, note) {
+async function savePoint(rssi, snr, sf, bw, cr, freq, crc, channel, adr, gw, note) {
     // Get current location from marker or navigator
     const lat = userLocationMarker.getLatLng().lat;
     const lng = userLocationMarker.getLatLng().lng;
@@ -261,6 +261,7 @@ async function savePoint(rssi, snr, sf, bw, cr, crc, channel, adr, gw, note) {
                 sf: sf,
                 bw: bw,
                 cr: cr,
+                freq: freq,
                 crc: crc,
                 channel: channel,
                 adr: adr,

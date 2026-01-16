@@ -274,10 +274,10 @@ app.get('/api/export-csv', async (req, res) => {
 app.get('/api/get-all-data', async (req, res) => {
     try {
         const query = `
-            SELECT id, 'live' as type, rssi, snr, spreading_factor, bandwidth, code_rate, crc_status, channel, adr, latitude, longitude, created_at 
+            SELECT id, 'live' as type, gateway_id, rssi, snr, frequency, spreading_factor, bandwidth, code_rate, crc_status, channel, adr, latitude, longitude, created_at 
             FROM measurements WHERE latitude IS NOT NULL
             UNION ALL
-            SELECT id, 'saved' as type, avg_rssi as rssi, avg_snr as snr, spreading_factor, bandwidth, code_rate, crc_status, channel, adr, latitude, longitude, created_at 
+            SELECT id, 'saved' as type, gateway_id, avg_rssi as rssi, avg_snr as snr, frequency, spreading_factor, bandwidth, code_rate, crc_status, channel, adr, latitude, longitude, created_at 
             FROM saved_points WHERE latitude IS NOT NULL
             ORDER BY created_at DESC
         `;
@@ -304,7 +304,7 @@ app.get('/api/poll-session', async (req, res) => {
     try {
         // Find NEW measurements (regardless of location)
         const startTime = activeSessions[sessionId].startTime;
-        const result = await pool.query('SELECT rssi, snr, spreading_factor, bandwidth, code_rate, crc_status, channel, adr, gateway_id FROM measurements WHERE created_at > $1 ORDER BY created_at ASC', [startTime]);
+        const result = await pool.query('SELECT rssi, snr, frequency, spreading_factor, bandwidth, code_rate, crc_status, channel, adr, gateway_id FROM measurements WHERE created_at > $1 ORDER BY created_at ASC', [startTime]);
 
         const readings = result.rows.filter(r => r.rssi !== null && !isNaN(parseFloat(r.rssi)));
 
@@ -323,6 +323,7 @@ app.get('/api/poll-session', async (req, res) => {
                 sf: last.spreading_factor || 7,
                 bw: last.bandwidth,
                 cr: last.code_rate,
+                freq: last.frequency,
                 crc: last.crc_status,
                 channel: last.channel,
                 adr: last.adr,
@@ -337,10 +338,10 @@ app.get('/api/poll-session', async (req, res) => {
 });
 
 app.post('/api/save-point', async (req, res) => {
-    const { avg_rssi, avg_snr, sf, bw, cr, crc, channel, adr, gw, lat, lng, note } = req.body;
+    const { avg_rssi, avg_snr, sf, bw, cr, freq, crc, channel, adr, gw, lat, lng, note } = req.body;
     try {
-        await pool.query('INSERT INTO saved_points (avg_rssi, avg_snr, spreading_factor, bandwidth, code_rate, crc_status, channel, adr, gateway_id, latitude, longitude, note) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, $12)',
-            [avg_rssi, avg_snr, sf || 7, bw, cr, crc, channel, adr, gw, lat, lng, note || '']);
+        await pool.query('INSERT INTO saved_points (avg_rssi, avg_snr, spreading_factor, bandwidth, code_rate, frequency, crc_status, channel, adr, gateway_id, latitude, longitude, note) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, $12, $13)',
+            [avg_rssi, avg_snr, sf || 7, bw, cr, freq, crc, channel, adr, gw, lat, lng, note || '']);
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: 'Save failed' });
