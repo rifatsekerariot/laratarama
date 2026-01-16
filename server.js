@@ -34,11 +34,76 @@ const pool = new Pool({
     port: process.env.DB_PORT || 5432,
 });
 
+async function ensureSchema() {
+    try {
+        console.log('🔧 Verifying Database Schema...');
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(50) UNIQUE NOT NULL,
+                password_hash VARCHAR(255) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS measurements (
+                id SERIAL PRIMARY KEY,
+                gateway_id VARCHAR(50),
+                rssi NUMERIC,
+                snr NUMERIC,
+                frequency NUMERIC,
+                latitude DOUBLE PRECISION,
+                longitude DOUBLE PRECISION,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS saved_points (
+                id SERIAL PRIMARY KEY,
+                note TEXT,
+                avg_rssi NUMERIC,
+                avg_snr NUMERIC,
+                latitude DOUBLE PRECISION,
+                longitude DOUBLE PRECISION,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS planned_gateways (
+                id SERIAL PRIMARY KEY,
+                latitude DOUBLE PRECISION,
+                longitude DOUBLE PRECISION,
+                radius NUMERIC,
+                frequency NUMERIC,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS app_config (
+                key VARCHAR(50) PRIMARY KEY,
+                value TEXT
+            );
+            CREATE TABLE IF NOT EXISTS integrations (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100),
+                endpoint_slug VARCHAR(50) UNIQUE,
+                decoder_script TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS system_logs (
+                id SERIAL PRIMARY KEY,
+                source VARCHAR(50),
+                level VARCHAR(20),
+                message TEXT,
+                details JSONB,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        console.log('✅ Schema Verified. Tables are ready.');
+    } catch (e) {
+        console.error('❌ Schema Sync Failed:', e.message);
+    }
+}
+
 const connectWithRetry = () => {
     console.log('⏳ Attempting to connect to PostgreSQL...');
-    pool.connect().then(client => {
+    pool.connect().then(async (client) => {
         console.log('✅ Connected to PostgreSQL Database');
         client.release();
+        // Run Migration
+        await ensureSchema();
     }).catch(err => {
         console.error('❌ Connection Failed:', err.message);
         console.log('🔄 Retrying in 5 seconds...');
