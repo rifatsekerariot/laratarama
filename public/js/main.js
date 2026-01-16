@@ -233,14 +233,14 @@ async function pollSession() {
 
             // Auto-Save without prompt
             // Note is empty string by default
-            savePoint(data.avg_rssi, data.avg_snr, data.sf, '');
+            savePoint(data.avg_rssi, data.avg_snr, data.sf, data.bw, data.cr, data.crc, data.channel, data.adr, data.gw, '');
         }
     } catch (e) {
         console.error(e);
     }
 }
 
-async function savePoint(rssi, snr, sf, note) {
+async function savePoint(rssi, snr, sf, bw, cr, crc, channel, adr, gw, note) {
     // Get current location from marker or navigator
     const lat = userLocationMarker.getLatLng().lat;
     const lng = userLocationMarker.getLatLng().lng;
@@ -259,6 +259,12 @@ async function savePoint(rssi, snr, sf, note) {
                 avg_rssi: rssi,
                 avg_snr: snr,
                 sf: sf,
+                bw: bw,
+                cr: cr,
+                crc: crc,
+                channel: channel,
+                adr: adr,
+                gw: gw,
                 lat: lat,
                 lng: lng,
                 note: note
@@ -267,7 +273,6 @@ async function savePoint(rssi, snr, sf, note) {
 
         const result = await res.json();
         if (result.success) {
-            // alert('Saved successfully!'); // Removed alert to be less intrusive
             statusBox.style.display = 'none';
             loadData(); // Refresh map immediately
         }
