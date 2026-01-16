@@ -447,8 +447,8 @@ const processWebhook = async (slug, req, res) => {
         const rssi = parsed.rssi || -120;
         const snr = parsed.snr || 0;
 
-        await pool.query('INSERT INTO measurements (gateway_id, rssi, snr, frequency, spreading_factor, latitude, longitude) VALUES ($1,$2,$3,$4,$5,$6, $7)',
-            [parsed.gateway_id || 'gw', rssi, snr, parsed.frequency || 868, sf, lat, lng]);
+        await pool.query('INSERT INTO measurements (gateway_id, rssi, snr, frequency, spreading_factor, bandwidth, code_rate, crc_status, channel, adr, latitude, longitude) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)',
+            [parsed.gateway_id || 'gw', rssi, snr, parsed.frequency || 868, sf, parsed.bandwidth, parsed.codeRate, parsed.crc_status, parsed.channel, parsed.adr, lat, lng]);
 
         const logMsg = (lat && lng) ? 'Data Processed Successfully' : 'Data Received (Waiting for Location Fix)';
         await pool.query("INSERT INTO system_logs (source, level, message, details) VALUES ('webhook', 'info', $1, $2)",
