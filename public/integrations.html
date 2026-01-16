@@ -4,32 +4,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Entegrasyon Yönetimi</title>
+    <title>Entegrasyon & İzleme Merkezi</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
     <style>
-        .container {
-            max-width: 800px;
-            margin: 40px auto;
-            padding: 20px;
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }
+
+        .card {
             background: #1e293b;
             border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #334155;
         }
 
         h2 {
             color: #3b82f6;
             border-bottom: 1px solid #334155;
             padding-bottom: 10px;
+            margin-top: 0;
         }
 
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 15px;
         }
 
         label {
             display: block;
             color: #94a3b8;
             margin-bottom: 5px;
+            font-size: 0.9rem;
         }
 
         input,
@@ -40,18 +50,12 @@
             border: 1px solid #475569;
             color: white;
             border-radius: 6px;
-            box-sizing: border-box;
         }
 
         textarea {
-            height: 150px;
+            height: 120px;
             font-family: monospace;
-        }
-
-        .hint {
-            font-size: 0.8rem;
-            color: #64748b;
-            margin-top: 4px;
+            font-size: 0.9rem;
         }
 
         button {
@@ -62,6 +66,62 @@
             border-radius: 6px;
             cursor: pointer;
             font-weight: bold;
+            width: 100%;
+            transition: 0.2s;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        button.delete {
+            background: #ef4444;
+            width: auto;
+            padding: 5px 10px;
+            font-size: 0.8rem;
+        }
+
+        button.test {
+            background: #eab308;
+            color: black;
+            margin-top: 10px;
+        }
+
+        .list-item {
+            background: #0f172a;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .log-item {
+            font-family: monospace;
+            font-size: 0.85rem;
+            padding: 8px;
+            border-bottom: 1px solid #334155;
+        }
+
+        .log-success {
+            color: #4ade80;
+        }
+
+        .log-error {
+            color: #f87171;
+        }
+
+        .log-warn {
+            color: #fbbf24;
+        }
+
+        #logs-container {
+            max-height: 400px;
+            overflow-y: auto;
+            background: #0f172a;
+            border-radius: 6px;
+            padding: 10px;
         }
     </style>
 </head>
@@ -74,25 +134,23 @@
         </nav>
     </div>
 
-    <div class="container">
-        <h2>Yeni Entegrasyon Ekle</h2>
-        <p>Buradan dış kaynaklardan (örneğin ChirpStack, TTN) veri alacak webhook'ları tanımlayabilirsiniz.</p>
-
-        <form id="integration-form">
-            <div class="form-group">
-                <label>Entegrasyon Adı</label>
-                <input type="text" id="name" placeholder="Örn: ChirpStack Gateway" required>
-            </div>
-
-            <div class="form-group">
-                <label>Webhook Slug (URL)</label>
-                <input type="text" id="slug" placeholder="chirpstack" required>
-                <div class="hint">Veri gönderilecek adres: <span style="color:#e2e8f0;">/webhook/{slug}</span></div>
-            </div>
-
-            <div class="form-group">
-                <label>Javascript Decoder Script</label>
-                <textarea id="script" required>
+    <div class="dashboard-grid">
+        <!-- LEFT: Create & Test -->
+        <div class="left-col">
+            <div class="card">
+                <h2>Yeni Entegrasyon Ekle</h2>
+                <form id="integration-form">
+                    <div class="form-group">
+                        <label>Entegrasyon Adı</label>
+                        <input type="text" id="name" placeholder="Örn: ChirpStack Gateway" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Webhook Slug</label>
+                        <input type="text" id="slug" placeholder="chirpstack" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Javascript Decoder</label>
+                        <textarea id="script" required>
 // (payload) -> { gw_id, rssi, snr, lat, lng }
 return {
     gateway_id: payload.gatewayID || 'unknown',
@@ -100,41 +158,144 @@ return {
     snr: payload.rxInfo ? payload.rxInfo[0].loRaSNR : 0,
     latitude: payload.latitude,
     longitude: payload.longitude
-};
-                </textarea>
-                <div class="hint">Gelen JSON verisini sistem formatına çeviren JS kodu. 'payload' değişkeni girdidir.
-                </div>
+};</textarea>
+                    </div>
+                    <button type="submit">Entegrasyonu Kaydet</button>
+                </form>
             </div>
 
-            <button type="submit">Entegrasyonu Kaydet</button>
-        </form>
+            <div class="card" style="margin-top: 20px;">
+                <h2>Test Simülasyonu</h2>
+                <p style="color:#94a3b8; font-size:0.9rem;">Seçili slug adresine sahte veri gönderir.</p>
+                <div class="form-group">
+                    <label>Hedef Slug</label>
+                    <input type="text" id="test-slug" placeholder="chirpstack">
+                </div>
+                <div class="form-group">
+                    <label>Test JSON Verisi</label>
+                    <textarea id="test-payload">
+{
+  "gatewayID": "test-gw-01",
+  "latitude": 41.0082,
+  "longitude": 28.9784,
+  "rxInfo": [{ "rssi": -85, "loRaSNR": 9 }]
+}</textarea>
+                </div>
+                <button type="button" class="test" onclick="sendTestPayload()">Veri Gönder (Test)</button>
+            </div>
+        </div>
+
+        <!-- RIGHT: List & Logs -->
+        <div class="right-col">
+            <div class="card">
+                <h2>Aktif Entegrasyonlar</h2>
+                <div id="integrations-list">Yükleniyor...</div>
+            </div>
+
+            <div class="card" style="margin-top: 20px;">
+                <h2>Canlı Sistem Logları</h2>
+                <div id="logs-container">
+                    <div style="text-align:center; color:#64748b;">Log bekleniyor...</div>
+                </div>
+                <button onclick="loadLogs()" style="margin-top:10px; background:#334155;">Yenile</button>
+            </div>
+        </div>
     </div>
 
     <script>
+        // Load Integrations
+        async function loadIntegrations() {
+            const res = await fetch('/api/integrations');
+            const data = await res.json();
+            const list = document.getElementById('integrations-list');
+            list.innerHTML = '';
+            data.forEach(item => {
+                list.innerHTML += `
+                    <div class="list-item">
+                        <div>
+                            <strong>${item.name}</strong><br>
+                            <span style="color:#64748b; font-size:0.8rem;">/webhook/${item.endpoint_slug}</span>
+                        </div>
+                        <button class="delete" onclick="deleteIntegration(${item.id})">Sil</button>
+                    </div>
+                `;
+            });
+        }
+
+        // Delete Integration
+        async function deleteIntegration(id) {
+            if (!confirm('Silmek istediğinize emin misiniz?')) return;
+            await fetch(`/api/integrations/${id}`, { method: 'DELETE' });
+            loadIntegrations();
+        }
+
+        // Load Logs
+        async function loadLogs() {
+            const res = await fetch('/api/system-logs');
+            const data = await res.json();
+            const container = document.getElementById('logs-container');
+            container.innerHTML = '';
+            data.forEach(log => {
+                let colorClass = 'log-success';
+                if (log.level === 'error') colorClass = 'log-error';
+                if (log.level === 'warn') colorClass = 'log-warn';
+
+                const time = new Date(log.created_at).toLocaleTimeString();
+                container.innerHTML += `
+                    <div class="log-item ${colorClass}">
+                        [${time}] [${log.source}] ${log.message}
+                        <div style="color:#94a3b8; font-size:0.75rem;">${JSON.stringify(log.details).substring(0, 100)}...</div>
+                    </div>
+                `;
+            });
+        }
+
+        // Create Integration
         document.getElementById('integration-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const name = document.getElementById('name').value;
             const slug = document.getElementById('slug').value;
             const script = document.getElementById('script').value;
 
-            try {
-                const res = await fetch('/api/integrations', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, slug, script })
-                });
+            const res = await fetch('/api/integrations', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, slug, script })
+            });
 
-                if (res.ok) {
-                    alert('Entegrasyon Başarıyla Eklendi!');
-                    document.getElementById('integration-form').reset();
-                } else {
-                    alert('Hata!');
-                }
-            } catch (e) {
-                console.error(e);
-                alert('Server Hatası');
+            if (res.ok) {
+                alert('Entegrasyon Eklendi!');
+                document.getElementById('integration-form').reset();
+                loadIntegrations();
+            } else {
+                alert('Hata!');
             }
         });
+
+        // Send Test Payload
+        async function sendTestPayload() {
+            const slug = document.getElementById('test-slug').value;
+            const payload = document.getElementById('test-payload').value;
+            if (!slug) return alert('Slug giriniz');
+
+            try {
+                const res = await fetch(`/webhook/${slug}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: payload
+                });
+                const text = await res.text();
+                alert('Sunucu Yanıtı: ' + text);
+                loadLogs(); // Refresh logs to see result
+            } catch (e) {
+                alert('Gönderim Hatası: ' + e);
+            }
+        }
+
+        // Init
+        loadIntegrations();
+        loadLogs();
+        setInterval(loadLogs, 5000); // Auto-refresh logs
     </script>
 </body>
 

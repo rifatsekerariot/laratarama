@@ -259,37 +259,91 @@ app.post('/api/save-scenario', async (req, res) => {
     }
 });
 
-// Integrations (Webhooks)
+// Integrations (Webhooks) - Management
+app.get('/api/integrations', async (req, res) => {
+    if (!req.session.userId) return res.status(401).send('Unauthorized');
+    try {
+        const result = await pool.query('SELECT id, name, endpoint_slug, created_at FROM integrations ORDER BY created_at DESC');
+        res.json(result.rows);
+    } catch (e) {
+        res.status(500).json({ error: 'Fetch error' });
+    }
+});
+
 app.post('/api/integrations', async (req, res) => {
+    if (!req.session.userId) return res.status(401).send('Unauthorized');
     const { name, slug, script } = req.body;
     try {
         await pool.query('INSERT INTO integrations (name, endpoint_slug, decoder_script) VALUES ($1, $2, $3)', [name, slug, script]);
+        // Audit Log
+        await pool.query("INSERT INTO system_logs (source, level, message, details) VALUES ('system', 'info', 'Integration Created', $1)", [JSON.stringify({ name, slug })]);
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
 
-// Dynamic Webhook Handler (Public-ish, but managed)
+app.delete('/api/integrations/:id', async (req, res) => {
+    if (!req.session.userId) return res.status(401).send('Unauthorized');
+    const { id } = req.params;
+    try {
+        await pool.query('DELETE FROM integrations WHERE id = $1', [id]);
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: 'Delete failed' });
+    }
+});
+
+// System Logs (Monitoring)
+app.get('/api/system-logs', async (req, res) => {
+    if (!req.session.userId) return res.status(401).send('Unauthorized');
+    try {
+        const result = await pool.query('SELECT * FROM system_logs ORDER BY created_at DESC LIMIT 50');
+        res.json(result.rows);
+    } catch (e) {
+        res.status(500).json({ error: 'Fetch logs error' });
+    }
+});
+
+// Dynamic Webhook Handler
 app.post('/webhook/:slug', async (req, res) => {
     const { slug } = req.params;
+    const loggingContext = { slug, payload: req.body };
+
     try {
         const result = await pool.query('SELECT decoder_script FROM integrations WHERE endpoint_slug = $1', [slug]);
-        if (result.rows.length === 0) return res.status(404).send('Not Found');
+        if (result.rows.length === 0) {
+            await pool.query("INSERT INTO system_logs (source, level, message, details) VALUES ('webhook', 'warn', 'Endpoint Not Found', $1)", [JSON.stringify(loggingContext)]);
+            return res.status(404).send('Not Found');
+        }
 
         const parserFunc = new Function('payload', result.rows[0].decoder_script);
         let parsed;
-        try { parsed = parserFunc(req.body); } catch (e) { return res.status(400).send('Decoder Error'); }
+        try {
+            parsed = parserFunc(req.body);
+        } catch (e) {
+            await pool.query("INSERT INTO system_logs (source, level, message, details) VALUES ('webhook', 'error', 'Decoder Script Failed', $1)",
+                [JSON.stringify({ ...loggingContext, error: e.message })]);
+            return res.status(400).send('Decoder Error');
+        }
 
-        if (parsed && parsed.latitude) {
+        if (parsed && parsed.latitude && parsed.longitude) {
             await pool.query('INSERT INTO measurements (gateway_id, rssi, snr, frequency, latitude, longitude) VALUES ($1,$2,$3,$4,$5,$6)',
                 [parsed.gateway_id || 'gw', parsed.rssi || -120, parsed.snr || 0, parsed.frequency || 868, parsed.latitude, parsed.longitude]);
+
+            await pool.query("INSERT INTO system_logs (source, level, message, details) VALUES ('webhook', 'info', 'Data Processed Successfully', $1)",
+                [JSON.stringify({ ...loggingContext, parsed })]);
+
             res.send('OK');
         } else {
+            await pool.query("INSERT INTO system_logs (source, level, message, details) VALUES ('webhook', 'warn', 'No Location in Data', $1)",
+                [JSON.stringify({ ...loggingContext, parsed })]);
             res.status(200).send('No Location Data');
         }
     } catch (e) {
         console.error(e);
+        await pool.query("INSERT INTO system_logs (source, level, message, details) VALUES ('webhook', 'error', 'System Error', $1)",
+            [JSON.stringify({ ...loggingContext, error: e.message })]);
         res.status(500).send('Error');
     }
 });

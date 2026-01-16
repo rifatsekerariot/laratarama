@@ -54,6 +54,17 @@ CREATE TABLE IF NOT EXISTS integrations (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100),
     endpoint_slug VARCHAR(50) UNIQUE, -- e.g. /webhook/chirpstack
-    decoder_script TEXT, -- JS function body: (payload) => { return { rssi, snr, lat, lng, gw }; }
+    decoder_script TEXT, -- JS function body
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Webhook/System Logs (For Debugging & Audit)
+CREATE TABLE IF NOT EXISTS system_logs (
+    id SERIAL PRIMARY KEY,
+    source VARCHAR(50), -- e.g., 'webhook', 'system', 'error'
+    level VARCHAR(20), -- 'info', 'warn', 'error'
+    message TEXT,
+    details JSONB, -- Store payload/parsed data here
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
