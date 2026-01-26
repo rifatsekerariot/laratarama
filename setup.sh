@@ -106,6 +106,8 @@ fi
 
 # 4. Final Deployment
 echo "Starting Application..."
-docker-compose up -d --build
+echo "Pulling latest images..."
+docker-compose pull
+docker-compose up -d
 
 echo "Deployment Complete! Access configuration at https://$DOMAIN"

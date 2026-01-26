@@ -3,6 +3,7 @@ version: '3.8'
 services:
   app:
     build: .
+    image: ghcr.io/rifatsekerariot/laratarama:latest
     container_name: ariot_app
     restart: always
     expose:
@@ -53,4 +54,5 @@ services:
 
 volumes:
   pgdata:
+
 

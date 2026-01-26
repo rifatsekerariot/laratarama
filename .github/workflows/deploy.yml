@@ -4,8 +4,44 @@ on:
   push:
     branches: [ "main", "master" ]
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
 jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
   deploy:
+    needs: build-and-push
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -18,9 +54,11 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-             cd /path/to/project # You might need to make this dynamic or fixed
-             # If project doesn't exist, clone it (First time setup should ideally be manual or via setup.sh)
-             # Assuming project exists from setup.sh
+             cd /path/to/project 
+             # Pull latest code for docker-compose.yml changes
              git pull origin main
-             docker-compose up -d --build
+             # Login to registry (if private, but using public access for now or user setup)
+             # Better to include login here if needed, but 'docker-compose up' might pull if public
+             docker-compose pull
+             docker-compose up -d --remove-orphans
              docker system prune -f
