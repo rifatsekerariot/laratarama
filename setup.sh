@@ -27,8 +27,16 @@ if ! [ -x "$(command -v docker-compose)" ]; then
 fi
 
 # 2. Configuration
+echo "Configuring deployment..."
 read -p "Enter Domain Name (e.g., example.com): " DOMAIN
 read -p "Enter Email for SSL (e.g., admin@example.com): " EMAIL
+
+echo "Pulling latest images from GHCR..."
+if ! docker-compose pull; then
+    echo "Warning: Failed to pull images. If the repository is private, please run 'docker login ghcr.io' first."
+    echo "Attempting to build locally as fallback..."
+    docker-compose build
+fi
 
 # Create directories
 mkdir -p nginx/conf.d
@@ -106,8 +114,6 @@ fi
 
 # 4. Final Deployment
 echo "Starting Application..."
-echo "Pulling latest images..."
-docker-compose pull
 docker-compose up -d
 
 echo "Deployment Complete! Access configuration at https://$DOMAIN"
