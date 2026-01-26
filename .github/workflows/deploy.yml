@@ -40,25 +40,3 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-  deploy:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-             cd /path/to/project 
-             # Pull latest code for docker-compose.yml changes
-             git pull origin main
-             # Login to registry (if private, but using public access for now or user setup)
-             # Better to include login here if needed, but 'docker-compose up' might pull if public
-             docker-compose pull
-             docker-compose up -d --remove-orphans
-             docker system prune -f
