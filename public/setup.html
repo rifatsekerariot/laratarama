@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Kurulum Sihirbazı</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body class="setup-page">
+    <div class="setup-card">
+        <div class="setup-steps">
+            <div class="step active"></div>
+            <div class="step active"></div>
+            <div class="step active"></div>
+        </div>
+        <h1>Hoşgeldiniz</h1>
+        <p>Lütfen platformunuzu yapılandırın.</p>
+
+        <form id="setup-form">
+            <div class="form-group">
+                <label>Uygulama İsmi (Markanız)</label>
+                <input type="text" id="app_name" placeholder="Örn: My City IoT" required>
+            </div>
+
+            <div class="form-group">
+                <label>Admin Kullanıcı Adı</label>
+                <input type="text" id="admin_user" value="admin" required>
+            </div>
+
+            <div class="form-group">
+                <label>Yeni Admin Şifresi</label>
+                <input type="password" id="admin_pass" placeholder="Güçlü bir şifre girin" required>
+            </div>
+
+            <button type="submit">Kurulumu Tamamla 🚀</button>
+        </form>
+    </div>
+
+    <script>
+        document.getElementById('setup-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const payload = {
+                appName: document.getElementById('app_name').value,
+                adminUser: document.getElementById('admin_user').value,
+                adminPass: document.getElementById('admin_pass').value
+            };
+
+            try {
+                const res = await fetch('/api/complete-setup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (res.ok) {
+                    alert('Kurulum Başarılı! Giriş ekranına yönlendiriliyorsunuz.');
+                    window.location.href = '/login.html';
+                } else {
+                    alert('Hata oluştu.');
+                }
+            } catch (e) {
+                alert('Bağlantı hatası.');
+            }
+        });
+    </script>
+</body>
+
+</html>

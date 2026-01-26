@@ -1,0 +1,711 @@
+:root {
+    --bg-color: #0f172a;
+    --text-color: #e2e8f0;
+    --accent-color: #3b82f6;
+    --danger-color: #ef4444;
+    --success-color: #22c55e;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Inter', sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+}
+
+#map {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 0;
+}
+
+/* UI Overlay */
+.ui-layer {
+    position: absolute;
+    z-index: 1000;
+    pointer-events: none;
+    /* Let clicks pass through to map where not interacting */
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+.top-nav {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    pointer-events: auto;
+}
+
+.nav-btn {
+    background: rgba(30, 41, 59, 0.9);
+    border: 1px solid #334155;
+    color: var(--text-color);
+    padding: 10px 20px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+    backdrop-filter: blur(5px);
+    transition: all 0.2s;
+}
+
+.nav-btn:hover,
+.nav-btn.active {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+}
+
+/* Status Box - Centered */
+#status-box {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(15, 23, 42, 0.95);
+    border: 2px solid var(--accent-color);
+    padding: 20px 40px;
+    border-radius: 12px;
+    text-align: center;
+    pointer-events: auto;
+    display: none;
+    /* Hidden by default */
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+    min-width: 200px;
+}
+
+#status-box h3 {
+    margin: 0 0 10px 0;
+    font-size: 1.2rem;
+}
+
+.loader {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid var(--accent-color);
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 10px auto;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* Bottom Controls */
+.bottom-controls {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    pointer-events: auto;
+    margin-bottom: 20px;
+}
+
+.control-btn {
+    border: none;
+    padding: 15px 30px;
+    border-radius: 50px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    transition: transform 0.1s;
+}
+
+.control-btn:active {
+    transform: scale(0.95);
+}
+
+.btn-start {
+    background: var(--success-color);
+    color: white;
+}
+
+.btn-clear {
+    background: var(--danger-color);
+    color: white;
+}
+
+/* 3D Page Overrides */
+#control-panel {
+    background: rgba(15, 23, 42, 0.9);
+    padding: 20px;
+    border-radius: 12px;
+    max-width: 340px;
+    pointer-events: auto;
+}
+
+/* Planner Layout */
+.planner-container {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+}
+
+.sidebar {
+    width: 340px;
+    background: #1e293b;
+    padding: 20px;
+    box-sizing: border-box;
+    overflow-y: auto;
+    z-index: 1001;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
+}
+
+.planner-map {
+    flex-grow: 1;
+    position: relative;
+}
+
+/* Mobile Responsive for Planner */
+@media (max-width: 768px) {
+    .planner-container {
+        flex-direction: column-reverse;
+    }
+
+    .sidebar {
+        width: 100%;
+        height: 45vh;
+    }
+
+    .planner-map {
+        height: 55vh;
+    }
+}
+
+/* Map Popup Styling */
+.leaflet-popup-content-wrapper {
+    background: var(--bg-color);
+    /* Matches theme */
+    color: var(--text-color);
+    border: 1px solid var(--accent-color);
+    border-radius: 12px;
+    padding: 0;
+    overflow: hidden;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+}
+
+.leaflet-popup-content {
+    margin: 0;
+    width: 260px !important;
+}
+
+.custom-popup {
+    font-family: 'Inter', sans-serif;
+}
+
+.popup-header {
+    background: rgba(30, 41, 59, 1);
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #334155;
+}
+
+.popup-tag {
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.popup-tag.live {
+    background: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+}
+
+.popup-tag.saved {
+    background: rgba(34, 197, 94, 0.2);
+    color: #4ade80;
+}
+
+.popup-time {
+    font-size: 0.75rem;
+    color: #94a3b8;
+}
+
+.popup-stats {
+    padding: 16px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.stat-label {
+    font-size: 0.7rem;
+    color: #94a3b8;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+}
+
+.stat-value {
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.popup-btn-delete {
+    display: block;
+    width: 100%;
+    border: none;
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+    font-weight: 600;
+    padding: 10px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    text-align: center;
+    transition: all 0.2s;
+    border-top: 1px solid #334155;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.popup-btn-delete:hover {
+    background: #ef4444;
+    color: white;
+}
+
+.leaflet-popup-tip {
+    background: var(--bg-color);
+    border: 1px solid var(--accent-color);
+    border-top: none;
+    border-left: none;
+}
+
+.leaflet-container a.leaflet-popup-close-button {
+    color: #94a3b8;
+    font-size: 18px;
+    padding: 8px;
+}
+
+
+/* =========================================
+   Integrations Page
+   ========================================= */
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    max-width: 1200px;
+    margin: 20px auto;
+    padding: 0 20px;
+}
+
+.card {
+    background: #1e293b;
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid #334155;
+    margin-bottom: 20px;
+    /* added for spacing */
+}
+
+.integrations-page h2 {
+    color: #3b82f6;
+    border-bottom: 1px solid #334155;
+    padding-bottom: 10px;
+    margin-top: 0;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.integrations-page label {
+    display: block;
+    color: #94a3b8;
+    margin-bottom: 5px;
+    font-size: 0.9rem;
+}
+
+.integrations-page input,
+.integrations-page textarea {
+    width: 100%;
+    padding: 10px;
+    background: #0f172a;
+    border: 1px solid #475569;
+    color: white;
+    border-radius: 6px;
+    box-sizing: border-box;
+    /* ensure padding doesn't overflow */
+}
+
+.integrations-page textarea {
+    height: 120px;
+    font-family: monospace;
+    font-size: 0.9rem;
+}
+
+.integrations-page button {
+    background: #22c55e;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    width: 100%;
+    transition: 0.2s;
+}
+
+.integrations-page button:hover {
+    opacity: 0.9;
+}
+
+.integrations-page button.delete {
+    background: #ef4444;
+    width: auto;
+    padding: 5px 10px;
+    font-size: 0.8rem;
+}
+
+.integrations-page button.test {
+    background: #eab308;
+    color: black;
+    margin-top: 10px;
+}
+
+.list-item {
+    background: #0f172a;
+    padding: 10px;
+    margin-bottom: 10px;
+    border-radius: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.log-item {
+    font-family: monospace;
+    font-size: 0.85rem;
+    padding: 8px;
+    border-bottom: 1px solid #334155;
+}
+
+.log-success {
+    color: #4ade80;
+}
+
+.log-error {
+    color: #f87171;
+}
+
+.log-warn {
+    color: #fbbf24;
+}
+
+#logs-container {
+    max-height: 400px;
+    overflow-y: auto;
+    background: #0f172a;
+    border-radius: 6px;
+    padding: 10px;
+}
+
+/* =========================================
+   Login Page
+   ========================================= */
+.login-page {
+    /* Body overrides */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #0f172a;
+    /* Fallback */
+}
+
+.login-card {
+    background: #1e293b;
+    padding: 40px;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    width: 100%;
+    max-width: 320px;
+    text-align: center;
+    border: 1px solid #334155;
+}
+
+.login-page h2 {
+    margin-bottom: 20px;
+    color: #3b82f6;
+}
+
+.login-page input {
+    width: 100%;
+    padding: 12px;
+    margin: 10px 0;
+    background: #0f172a;
+    border: 1px solid #475569;
+    color: white;
+    border-radius: 6px;
+    box-sizing: border-box;
+}
+
+.login-page button {
+    width: 100%;
+    padding: 12px;
+    margin-top: 20px;
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.login-page button:hover {
+    background: #2563eb;
+}
+
+.login-page .error {
+    color: #ef4444;
+    margin-top: 10px;
+    font-size: 0.9rem;
+    display: none;
+}
+
+/* =========================================
+   Setup Page
+   ========================================= */
+.setup-page {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.setup-card {
+    background: rgba(30, 41, 59, 0.95);
+    padding: 40px;
+    border-radius: 16px;
+    width: 100%;
+    max-width: 450px;
+    border: 1px solid #334155;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+}
+
+.setup-page h1 {
+    color: #3b82f6;
+    margin-top: 0;
+    text-align: center;
+}
+
+.setup-page p {
+    color: #94a3b8;
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+/* Reusing .form-group from integrations */
+
+.setup-page label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.setup-page input {
+    width: 100%;
+    padding: 12px;
+    background: #0f172a;
+    border: 1px solid #475569;
+    color: white;
+    border-radius: 8px;
+    box-sizing: border-box;
+    font-size: 1rem;
+}
+
+.setup-page input:focus {
+    border-color: #3b82f6;
+    outline: none;
+}
+
+.setup-page button {
+    width: 100%;
+    padding: 15px;
+    background: #22c55e;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.setup-page button:hover {
+    background: #16a34a;
+}
+
+.setup-steps {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+
+.step {
+    width: 30%;
+    height: 4px;
+    background: #334155;
+    border-radius: 2px;
+}
+
+.step.active {
+    background: #3b82f6;
+}
+
+/* =========================================
+   Responsive Design (Mobile & Tablet)
+   ========================================= */
+
+@media (max-width: 768px) {
+
+    /* Main Layout */
+    .ui-layer {
+        padding: 10px;
+    }
+
+    /* Top Navigation (Stack on mobile) */
+    .top-nav {
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        background: rgba(15, 23, 42, 0.95);
+        padding: 15px;
+        border-radius: 12px;
+        width: 100%;
+        max-width: 300px;
+        margin: 0 auto;
+        border: 1px solid #334155;
+    }
+
+    .nav-btn {
+        width: 100%;
+        text-align: center;
+        box-sizing: border-box;
+    }
+
+    #app-brand {
+        margin-right: 0 !important;
+        margin-bottom: 5px;
+        display: block;
+        text-align: center;
+    }
+
+    /* Bottom Controls */
+    .bottom-controls {
+        flex-direction: column;
+        /* Stack buttons */
+        gap: 10px;
+        align-items: flex-end;
+        /* Align to right or change to center */
+        margin-bottom: 60px;
+        /* Space from bottom edge */
+    }
+
+    .control-btn {
+        padding: 12px 20px;
+        font-size: 1rem;
+        width: auto;
+    }
+
+    .bottom-controls .control-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    /* Make buttons floating on bottom center for better mobile UX?
+       Or keep them stacked. Let's stack them at bottom center. */
+    .bottom-controls {
+        flex-direction: row;
+        flex-wrap: wrap;
+        position: absolute;
+        bottom: 20px;
+        left: 0;
+        width: 100%;
+        justify-content: center;
+        margin-bottom: 0;
+        background: rgba(15, 23, 42, 0.8);
+        padding: 10px 0;
+        backdrop-filter: blur(5px);
+        gap: 15px;
+    }
+
+    .control-btn {
+        padding: 10px 15px;
+        font-size: 0.9rem;
+        border-radius: 8px;
+    }
+
+    /* Dashboard Grid (Integrations Page) */
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+        /* Single column */
+        padding: 0 10px;
+    }
+
+    /* Status Box */
+    #status-box {
+        width: 90%;
+        max-width: 300px;
+    }
+
+    /* Planner */
+    .planner-container {
+        flex-direction: column-reverse;
+        /* Map on top (or bottom depending on pref), 
+                                           but usually map needs height. 
+                                           Existing CSS had this but lets refine it. */
+    }
+
+    .sidebar {
+        width: 100%;
+        height: auto;
+        max-height: 40vh;
+        z-index: 2000;
+        /* Ensure on top */
+    }
+
+    .planner-map {
+        height: 60vh;
+        /* Remaining height */
+    }
+
+    /* Login & Setup Cards */
+    .login-container,
+    .setup-container {
+        width: 90%;
+        max-width: 400px;
+    }
+}

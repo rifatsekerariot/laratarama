@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: ariot_app
+    restart: always
+    expose:
+      - "3000"
+    environment:
+      - PORT=3000
+      - DB_HOST=db
+      - DB_USER=ariot
+      - DB_PASSWORD=ariot_secret
+      - DB_NAME=ariot_db
+    depends_on:
+      - db
+
+  db:
+    image: postgres:15-alpine
+    container_name: ariot_db
+    restart: always
+    environment:
+      - POSTGRES_USER=ariot
+      - POSTGRES_PASSWORD=ariot_secret
+      - POSTGRES_DB=ariot_db
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/init.sql
+
+  nginx:
+    image: nginx:alpine
+    container_name: ariot_nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    command: '/bin/sh -c ''while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g "daemon off;"'''
+    depends_on:
+      - app
+
+  certbot:
+    image: certbot/certbot
+    container_name: ariot_certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
+volumes:
+  pgdata:
+
