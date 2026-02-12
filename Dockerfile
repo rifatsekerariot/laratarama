@@ -1,16 +1,27 @@
-FROM node:18-alpine
+# ---- Build stage ----
+FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies
 COPY package*.json ./
-RUN npm install --production
+RUN npm ci --omit=dev
 
-# Copy source
+# ---- Production stage ----
+FROM node:18-alpine
+
+# node user/group already exist in node:18-alpine
+
+WORKDIR /app
+
+COPY --from=builder /app/node_modules ./node_modules
 COPY . .
 
-# Expose port
+# Log directory writable by node (for winston file logs)
+RUN mkdir -p /app/logs && chown -R node:node /app
+ENV LOG_DIR=/app/logs
+
+USER node
+
 EXPOSE 3000
 
-# Start command
 CMD ["node", "server.js"]

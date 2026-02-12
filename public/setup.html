@@ -26,46 +26,27 @@
             </div>
 
             <div class="form-group">
+                <label for="domain_name">Alan Adı (Domain)</label>
+                <input type="text" id="domain_name" name="domain_name" placeholder="panel.example.com" autocomplete="off">
+                <small style="color:#94a3b8;font-size:0.85rem;">İsteğe bağlı. Girerseniz HTTPS otomatik açılır.</small>
+            </div>
+
+            <div class="form-group">
                 <label>Admin Kullanıcı Adı</label>
                 <input type="text" id="admin_user" value="admin" required>
             </div>
 
             <div class="form-group">
                 <label>Yeni Admin Şifresi</label>
-                <input type="password" id="admin_pass" placeholder="Güçlü bir şifre girin" required>
+                <input type="password" id="admin_pass" placeholder="En az 8 karakter" required minlength="8">
+                <small style="color:#94a3b8;font-size:0.85rem;">En az 8 karakter girin.</small>
             </div>
 
             <button type="submit">Kurulumu Tamamla 🚀</button>
         </form>
     </div>
 
-    <script>
-        document.getElementById('setup-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const payload = {
-                appName: document.getElementById('app_name').value,
-                adminUser: document.getElementById('admin_user').value,
-                adminPass: document.getElementById('admin_pass').value
-            };
-
-            try {
-                const res = await fetch('/api/complete-setup', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                if (res.ok) {
-                    alert('Kurulum Başarılı! Giriş ekranına yönlendiriliyorsunuz.');
-                    window.location.href = '/login.html';
-                } else {
-                    alert('Hata oluştu.');
-                }
-            } catch (e) {
-                alert('Bağlantı hatası.');
-            }
-        });
-    </script>
+    <script src="/js/setup.js"></script>
 </body>
 
 </html>

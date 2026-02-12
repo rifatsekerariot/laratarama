@@ -1,17 +1,22 @@
+# Production: use pre-built image from Docker Hub (no local build, no source mount).
+# Zero-touch SSL: Caddy handles HTTPS automatically via Admin API (no Nginx/Certbot).
+
 services:
   app:
-    build: .
-    image: ghcr.io/rifatsekerariot/laratarama:latest
+    image: ariotiot/panel-envanter:latest
     container_name: ariot_app
     restart: always
     ports:
       - "3000:3000"
     environment:
       - PORT=3000
+      - NODE_ENV=production
+      - SESSION_SECRET=${SESSION_SECRET:-local-dev-session-secret-change-in-prod}
       - DB_HOST=db
       - DB_USER=ariot
       - DB_PASSWORD=ariot_secret
       - DB_NAME=ariot_db
+      - CADDY_ADMIN_URL=http://caddy:2019
     depends_on:
       db:
         condition: service_healthy
@@ -34,28 +39,24 @@ services:
       retries: 5
       start_period: 10s
 
-  nginx:
-    image: nginx:alpine
-    container_name: ariot_nginx
+  caddy:
+    image: caddy:alpine
+    container_name: ariot_caddy
     restart: always
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d
-      - ./certbot/conf:/etc/letsencrypt
-      - ./certbot/www:/var/www/certbot
-    command: '/bin/sh -c ''while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g "daemon off;"'''
+      - caddy_data:/data
+      - caddy_config:/config
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    environment:
+      - CADDY_AGREE=true
+      - CADDY_ADMIN=0.0.0.0:2019
     depends_on:
       - app
 
-  certbot:
-    image: certbot/certbot
-    container_name: ariot_certbot
-    volumes:
-      - ./certbot/conf:/etc/letsencrypt
-      - ./certbot/www:/var/www/certbot
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
-
 volumes:
   pgdata:
+  caddy_data:
+  caddy_config:

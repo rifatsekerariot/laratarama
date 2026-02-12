@@ -1,491 +1,456 @@
 require('dotenv').config();
+const logger = require('./logger');
+
 const express = require('express');
 const session = require('express-session');
+const connectPGSimple = require('connect-pg-simple');
 const bodyParser = require('body-parser');
+const helmet = require('helmet');
+const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 const { Pool } = require('pg');
 const path = require('path');
+const bcrypt = require('bcryptjs');
+const axios = require('axios');
+const { z } = require('zod');
 
-// 1. Error Handling (Global)
+// --- Production: require critical env (crash if missing) ---
+const isProduction = process.env.NODE_ENV === 'production';
+if (isProduction && !process.env.SESSION_SECRET) {
+    logger.error('FATAL: SESSION_SECRET is required in production. Set it in .env');
+    process.exit(1);
+}
+
 process.on('uncaughtException', (err) => {
-    console.error('🔥 Critical Error (Uncaught):', err.message);
+    logger.error('Critical Error: ' + err.message);
     process.exit(1);
 });
 
 const app = express();
-const port = process.env.PORT || 3001;
+const port = process.env.PORT || 3000;
 
-// 2. Middleware Configuration
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(session({
-    secret: 'ariot-secret-key-change-in-prod',
-    resave: false,
-    saveUninitialized: false,
-    cookie: { secure: false } // Set to true if using HTTPS
+// --- Trust proxy (required behind Nginx/reverse proxy for secure cookies) ---
+app.set('trust proxy', 1);
+
+// --- Security headers ---
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", "https://unpkg.com"],
+            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://unpkg.com"],
+            fontSrc: ["'self'", "https://fonts.gstatic.com", "https://unpkg.com"],
+            imgSrc: ["'self'", "data:", "https://*.tile.openstreetmap.org", "http://*.tile.openstreetmap.org", "https://unpkg.com"],
+            connectSrc: ["'self'", "https://*.tile.openstreetmap.org", "http://*.tile.openstreetmap.org"]
+        }
+    },
+    hsts: { maxAge: 31536000, includeSubDomains: true, preload: true }
 }));
 
-// 3. Database Connection
+// --- CORS: strict (no * in production) ---
+const corsOptions = {
+    origin: isProduction
+        ? (process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map(s => s.trim()) : false)
+        : true,
+    credentials: true,
+    optionsSuccessStatus: 200
+};
+app.use(cors(corsOptions));
+
+app.use(bodyParser.json({ limit: '100kb' }));
+app.use(bodyParser.urlencoded({ extended: true, limit: '100kb' }));
+
+// --- Health check (for Docker / load balancers; no auth) ---
+app.get('/health', (req, res) => res.status(200).send('OK'));
+
+// --- Database (must exist before session store) ---
 const pool = new Pool({
     user: process.env.DB_USER || 'postgres',
     host: process.env.DB_HOST || 'localhost',
     database: process.env.DB_NAME || 'ariot',
     password: process.env.DB_PASSWORD || 'postgres',
-    port: process.env.DB_PORT || 5432,
+    port: parseInt(process.env.DB_PORT || '5432', 10)
 });
+
+// --- Session (PostgreSQL store via connect-pg-simple) ---
+const sessionSecret = process.env.SESSION_SECRET || (isProduction ? null : 'dev-secret-do-not-use-in-prod');
+if (isProduction && !sessionSecret) {
+    logger.error('FATAL: SESSION_SECRET required');
+    process.exit(1);
+}
+const PGStore = connectPGSimple(session);
+const sessionStore = new PGStore({
+    pool,
+    tableName: 'session'
+});
+app.use(session({
+    store: sessionStore,
+    secret: sessionSecret,
+    resave: false,
+    saveUninitialized: false,
+    name: 'sid',
+    cookie: {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: 'strict',
+        maxAge: 24 * 60 * 60 * 1000
+    }
+}));
+
+const BCRYPT_ROUNDS = 12;
 
 async function ensureSchema() {
     try {
-        console.log('🔧 Verifying Database Schema...');
         await pool.query(`
+            CREATE TABLE IF NOT EXISTS app_config (
+                key VARCHAR(50) PRIMARY KEY,
+                value TEXT
+            );
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
                 username VARCHAR(50) UNIQUE NOT NULL,
                 password_hash VARCHAR(255) NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
-            CREATE TABLE IF NOT EXISTS measurements (
+            CREATE TABLE IF NOT EXISTS panel_locations (
                 id SERIAL PRIMARY KEY,
-                gateway_id VARCHAR(50),
-                rssi NUMERIC,
-                snr NUMERIC,
-                frequency NUMERIC,
-                spreading_factor NUMERIC,
-                bandwidth NUMERIC,
-                code_rate VARCHAR(20),
-                crc_status VARCHAR(20),
-                channel INTEGER,
-                adr BOOLEAN,
-                latitude DOUBLE PRECISION,
-                longitude DOUBLE PRECISION,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS saved_points (
-                id SERIAL PRIMARY KEY,
+                location_name VARCHAR(200) NOT NULL,
+                panel_count INTEGER NOT NULL DEFAULT 1,
+                latitude DOUBLE PRECISION NOT NULL,
+                longitude DOUBLE PRECISION NOT NULL,
                 note TEXT,
-                avg_rssi NUMERIC,
-                avg_snr NUMERIC,
-                spreading_factor NUMERIC,
-                frequency NUMERIC,
-                bandwidth NUMERIC,
-                code_rate VARCHAR(20),
-                crc_status VARCHAR(20),
-                channel INTEGER,
-                adr BOOLEAN,
-                gateway_id VARCHAR(50),
-                latitude DOUBLE PRECISION,
-                longitude DOUBLE PRECISION,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS planned_gateways (
-                id SERIAL PRIMARY KEY,
-                latitude DOUBLE PRECISION,
-                longitude DOUBLE PRECISION,
-                radius NUMERIC,
-                frequency NUMERIC,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS app_config (
-                key VARCHAR(50) PRIMARY KEY,
-                value TEXT
-            );
-            CREATE TABLE IF NOT EXISTS integrations (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(100),
-                endpoint_slug VARCHAR(50) UNIQUE,
-                decoder_script TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS system_logs (
-                id SERIAL PRIMARY KEY,
-                source VARCHAR(50),
-                level VARCHAR(20),
-                message TEXT,
-                details JSONB,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-
-        // Migrations for existing tables (Adding new columns)
-        await pool.query(`
-            ALTER TABLE saved_points ADD COLUMN IF NOT EXISTS spreading_factor NUMERIC;
-            ALTER TABLE saved_points ADD COLUMN IF NOT EXISTS frequency NUMERIC;
-            ALTER TABLE saved_points ADD COLUMN IF NOT EXISTS bandwidth NUMERIC;
-            ALTER TABLE saved_points ADD COLUMN IF NOT EXISTS code_rate VARCHAR(20);
-            ALTER TABLE saved_points ADD COLUMN IF NOT EXISTS crc_status VARCHAR(20);
-            ALTER TABLE saved_points ADD COLUMN IF NOT EXISTS channel INTEGER;
-            ALTER TABLE saved_points ADD COLUMN IF NOT EXISTS adr BOOLEAN;
-            ALTER TABLE saved_points ADD COLUMN IF NOT EXISTS gateway_id VARCHAR(50);
-
-            ALTER TABLE measurements ADD COLUMN IF NOT EXISTS spreading_factor NUMERIC;
-            ALTER TABLE measurements ADD COLUMN IF NOT EXISTS bandwidth NUMERIC;
-            ALTER TABLE measurements ADD COLUMN IF NOT EXISTS code_rate VARCHAR(20);
-            ALTER TABLE measurements ADD COLUMN IF NOT EXISTS crc_status VARCHAR(20);
-            ALTER TABLE measurements ADD COLUMN IF NOT EXISTS channel INTEGER;
-            ALTER TABLE measurements ADD COLUMN IF NOT EXISTS adr BOOLEAN;
-        `);
-
-        console.log('✅ Schema Verified. Tables are ready.');
+        await pool.query(`INSERT INTO app_config (key, value) VALUES ('is_configured', 'false') ON CONFLICT (key) DO NOTHING`);
+        logger.info('Schema OK.');
     } catch (e) {
-        console.error('❌ Schema Sync Failed:', e.message);
+        logger.error('Schema Failed: ' + e.message);
+    }
+}
+
+// --- Caddy Admin API: push config for zero-touch SSL ---
+const CADDY_ADMIN_URL = process.env.CADDY_ADMIN_URL || 'http://caddy:2019';
+
+function buildCaddyConfig(domainName) {
+    const servers = {
+        default: {
+            listen: [':80'],
+            routes: [{
+                handle: [{
+                    handler: 'reverse_proxy',
+                    upstreams: [{ dial: 'app:3000' }]
+                }]
+            }]
+        }
+    };
+    if (domainName) {
+        servers.domain = {
+            listen: [`https://${domainName}`],
+            routes: [{
+                handle: [{
+                    handler: 'reverse_proxy',
+                    upstreams: [{ dial: 'app:3000' }]
+                }]
+            }]
+        };
+    }
+    return { apps: { http: { servers } } };
+}
+
+async function updateCaddyConfig(domainName) {
+    const url = `${CADDY_ADMIN_URL.replace(/\/$/, '')}/load`;
+    try {
+        const config = buildCaddyConfig(domainName);
+        await axios.post(url, config, {
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 10000,
+            validateStatus: () => true
+        });
+        logger.info('Caddy config updated' + (domainName ? ` for ${domainName}` : ' (default :80 only)'));
+    } catch (e) {
+        logger.warn('Caddy config update failed: ' + (e.message || e.response?.data));
     }
 }
 
 const connectWithRetry = () => {
-    console.log('⏳ Attempting to connect to PostgreSQL...');
     pool.connect().then(async (client) => {
-        console.log('✅ Connected to PostgreSQL Database');
         client.release();
         await ensureSchema();
+        logger.info('Connected to PostgreSQL');
     }).catch(err => {
-        console.error('❌ Connection Failed:', err.message);
-        console.log('🔄 Retrying in 5 seconds...');
+        logger.error('DB Connection Failed: ' + err.message);
         setTimeout(connectWithRetry, 5000);
     });
 };
-
 connectWithRetry();
 
 pool.on('error', (err) => {
-    console.error('Unexpected error on idle client', err);
+    logger.error('Pool error: ' + err.message);
     process.exit(-1);
 });
 
-// State
-let activeSessions = {};
 let appConfig = {
     configured: false,
-    appName: 'ARIOT Platform',
-    adminUser: process.env.ADMIN_USER || 'admin',
-    adminPass: process.env.ADMIN_PASS || '12345'
+    appName: 'Panel Envanter',
+    adminUser: null,
+    adminPassHash: null
 };
 
 async function loadAppConfig() {
     try {
         const result = await pool.query('SELECT key, value FROM app_config');
-        if (result.rows.length > 0) {
-            const configMap = {};
-            result.rows.forEach(r => configMap[r.key] = r.value);
-            if (configMap['is_configured'] === 'true') {
-                appConfig.configured = true;
-                appConfig.appName = configMap['app_name'];
-                appConfig.adminUser = configMap['admin_user'];
-                appConfig.adminPass = configMap['admin_pass'];
-            }
+        const map = {};
+        result.rows.forEach(r => { map[r.key] = r.value; });
+        if (map['is_configured'] === 'true') {
+            appConfig.configured = true;
+            appConfig.appName = map['app_name'] || appConfig.appName;
+            appConfig.adminUser = map['admin_user'] || null;
+            appConfig.adminPassHash = map['admin_pass'] || null;
         }
     } catch (e) {
-        console.warn('Config load failed:', e.message);
+        logger.warn('Config load failed: ' + e.message);
     }
 }
 setTimeout(loadAppConfig, 1000);
 
-// 5. Auth & Protection Middleware
-const checkAuth = (req, res, next) => {
-    // Check Setup
-    if (!appConfig.configured) {
-        if (req.path === '/setup.html' || req.path === '/api/complete-setup' || req.path.startsWith('/css/') || req.path.startsWith('/js/')) {
-            return next();
+// --- Zod schemas (strict: reject unknown keys with 400) ---
+const LoginSchema = z.object({
+    user: z.string().min(1, 'Username required').max(50).trim(),
+    pass: z.string().min(1, 'Password required').max(500)
+}).strict();
+
+const hostnameRegex = /^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$/;
+const SetupSchema = z.object({
+    appName: z.string().min(1).max(100).trim(),
+    adminUser: z.string().min(1).max(50).trim(),
+    adminPass: z.string().min(8, 'Password must be at least 8 characters').max(500),
+    domainName: z.string().max(253).trim().optional()
+        .refine(v => v === undefined || v === '' || hostnameRegex.test(v), 'Invalid hostname format')
+        .transform(v => (v === '' ? undefined : v))
+}).strict();
+
+const PanelSchema = z.object({
+    location_name: z.string().min(1).max(200).trim(),
+    panel_count: z.coerce.number().int().min(1).max(100000).default(1),
+    latitude: z.coerce.number().min(-90).max(90),
+    longitude: z.coerce.number().min(-180).max(180),
+    note: z.string().max(2000).trim().nullable().optional().transform(v => v === '' ? null : v)
+}).strict();
+
+const IdParamSchema = z.object({
+    id: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().int().positive())
+});
+
+function validate(schema) {
+    return (req, res, next) => {
+        try {
+            req.validated = schema.parse(req.body);
+            next();
+        } catch (err) {
+            if (err instanceof z.ZodError) {
+                const msg = err.errors.map(e => e.message).join('; ');
+                return res.status(400).json({ error: msg });
+            }
+            next(err);
         }
+    };
+}
+
+function validateParams(schema) {
+    return (req, res, next) => {
+        try {
+            req.validatedParams = schema.parse(req.params);
+            next();
+        } catch (err) {
+            if (err instanceof z.ZodError) {
+                return res.status(400).json({ error: 'Invalid id' });
+            }
+            next(err);
+        }
+    };
+}
+
+// --- Rate limiters ---
+const strictLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    message: { error: 'Too many attempts. Try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false
+});
+
+const generalLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 200,
+    message: { error: 'Too many requests.' },
+    standardHeaders: true,
+    legacyHeaders: false
+});
+
+// --- Auth middleware ---
+const checkAuth = (req, res, next) => {
+    if (!appConfig.configured) {
+        const allowed = ['/setup.html', '/api/complete-setup', '/css/', '/js/'];
+        if (allowed.some(p => req.path === p || req.path.startsWith(p))) return next();
         return res.redirect('/setup.html');
     }
-
-    // Public Allowlist
-    const publicPaths = [
-        '/login.html',
-        '/setup.html',
-        '/api/login',
-        '/api/app-info'
-    ];
-
-    // Check allowlist or prefixes
-    if (publicPaths.includes(req.path) || req.path === '/webhook' || req.path.startsWith('/webhook/') || req.path.startsWith('/css/') || req.path.startsWith('/js/')) {
-        return next();
-    }
-
-    // Auth Check
+    const publicPaths = ['/login.html', '/setup.html', '/api/login', '/api/app-info', '/api/logout'];
+    if (publicPaths.includes(req.path) || req.path.startsWith('/css/') || req.path.startsWith('/js/')) return next();
     if (!req.session.userId) {
-        if (req.path.startsWith('/api/')) {
-            return res.status(401).json({ error: 'Unauthorized' });
-        }
+        if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Unauthorized' });
         return res.redirect('/login.html');
     }
     next();
 };
-app.use(checkAuth);
 
-// 6. Static Files
+app.use(checkAuth);
 app.use(express.static(path.join(__dirname, 'public')));
 
+// --- API (apply general limiter to /api) ---
+app.use('/api', generalLimiter);
 
-// --- API ROUTES ---
-
-// Auth
-app.post('/api/login', (req, res) => {
-    const { user, pass } = req.body;
-    if (user === appConfig.adminUser && pass === appConfig.adminPass) {
-        req.session.userId = user;
-        res.json({ success: true });
-    } else {
+// --- Login (strict limit + validation + bcrypt) ---
+app.post('/api/login', strictLimiter, validate(LoginSchema), async (req, res, next) => {
+    try {
+        const { user, pass } = req.validated;
+        if (!appConfig.adminUser || !appConfig.adminPassHash) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+        const match = user === appConfig.adminUser && await bcrypt.compare(pass, appConfig.adminPassHash);
+        if (match) {
+            req.session.userId = user;
+            return res.json({ success: true });
+        }
         res.status(401).json({ error: 'Invalid credentials' });
+    } catch (e) {
+        next(e);
     }
 });
 
-// Setup
 app.get('/api/app-info', (req, res) => {
     res.json({ name: appConfig.appName, configured: appConfig.configured });
 });
-app.post('/api/complete-setup', async (req, res) => {
-    const { appName, adminUser, adminPass } = req.body;
-    try {
-        await pool.query('INSERT INTO app_config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2', ['app_name', appName]);
-        await pool.query('INSERT INTO app_config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2', ['admin_user', adminUser]);
-        await pool.query('INSERT INTO app_config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2', ['admin_pass', adminPass]);
-        await pool.query('INSERT INTO app_config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2', ['is_configured', 'true']);
-        await loadAppConfig();
+
+// --- Logout (strict limit to prevent DoS on session destruction) ---
+app.post('/api/logout', strictLimiter, (req, res) => {
+    req.session.destroy((err) => {
+        if (err) return res.status(500).json({ error: 'Internal Server Error' });
+        res.clearCookie('sid', { path: '/', httpOnly: true, secure: isProduction, sameSite: 'strict' });
         res.json({ success: true });
-    } catch (e) {
-        res.status(500).json({ error: 'Setup failed' });
-    }
+    });
 });
 
-// CSV Export
-app.get('/api/export-csv', async (req, res) => {
-    if (!req.session.userId) return res.status(401).send('Unauthorized');
+// --- Setup (strict limit + validation + hash + race protection) ---
+app.post('/api/complete-setup', strictLimiter, validate(SetupSchema), async (req, res, next) => {
+    const { appName, adminUser, adminPass, domainName } = req.validated;
+    const client = await pool.connect();
     try {
-        const query = `
-            SELECT 'live' as type, gateway_id, rssi, snr, spreading_factor, bandwidth, code_rate, crc_status, channel, adr, latitude, longitude, created_at FROM measurements
-            UNION ALL
-            SELECT 'saved' as type, gateway_id, avg_rssi as rssi, avg_snr as snr, spreading_factor, bandwidth, code_rate, crc_status, channel, adr, latitude, longitude, created_at FROM saved_points
-        `;
-        const result = await pool.query(query);
-        const rows = result.rows.map(r =>
-            `${r.type},${r.gateway_id || 'manual'},${r.rssi},${r.snr},${r.spreading_factor || ''},${r.bandwidth || ''},${r.code_rate || ''},${r.crc_status || ''},${r.channel || ''},${r.adr || ''},${r.latitude},${r.longitude},${r.created_at}`
+        const existing = await client.query('SELECT value FROM app_config WHERE key = $1', ['is_configured']);
+        if (existing.rows[0]?.value === 'true') {
+            return res.status(409).json({ error: 'Already configured' });
+        }
+        const hash = await bcrypt.hash(adminPass, BCRYPT_ROUNDS);
+        await client.query('BEGIN');
+        const updated = await client.query(
+            `UPDATE app_config SET value = 'true' WHERE key = 'is_configured' AND value = 'false' RETURNING key`
         );
-
-        const csvContent = "type,gateway,rssi,snr,sf,bw,cr,crc,channel,adr,latitude,longitude,timestamp\n" + rows.join("\n");
-        res.header('Content-Type', 'text/csv');
-        res.attachment('ariot_data.csv');
-        res.send(csvContent);
-    } catch (err) {
-        res.status(500).send('DB Error');
-    }
-});
-
-// Get All Data
-app.get('/api/get-all-data', async (req, res) => {
-    try {
-        const query = `
-            SELECT id, 'live' as type, gateway_id, rssi, snr, frequency, spreading_factor, bandwidth, code_rate, crc_status, channel, adr, latitude, longitude, created_at 
-            FROM measurements WHERE latitude IS NOT NULL
-            UNION ALL
-            SELECT id, 'saved' as type, gateway_id, avg_rssi as rssi, avg_snr as snr, frequency, spreading_factor, bandwidth, code_rate, crc_status, channel, adr, latitude, longitude, created_at 
-            FROM saved_points WHERE latitude IS NOT NULL
-            ORDER BY created_at DESC
-        `;
-        const result = await pool.query(query);
-        res.json(result.rows.map(r => ({
-            ...r, rssi: parseFloat(r.rssi), snr: parseFloat(r.snr)
-        })));
-    } catch (err) {
-        res.status(500).json({ error: 'DB Error' });
-    }
-});
-
-// Session Actions
-app.get('/api/start-session', (req, res) => {
-    const sessionId = req.session.userId;
-    activeSessions[sessionId] = { startTime: new Date(), count: 0, samples: [] };
-    res.json({ status: 'started' });
-});
-
-app.get('/api/poll-session', async (req, res) => {
-    const sessionId = req.session.userId;
-    if (!activeSessions[sessionId]) return res.status(400).json({ error: 'No active session' });
-
-    try {
-        // Find NEW measurements (regardless of location)
-        const startTime = activeSessions[sessionId].startTime;
-        const result = await pool.query('SELECT rssi, snr, frequency, spreading_factor, bandwidth, code_rate, crc_status, channel, adr, gateway_id FROM measurements WHERE created_at > $1 ORDER BY created_at ASC', [startTime]);
-
-        const readings = result.rows.filter(r => r.rssi !== null && !isNaN(parseFloat(r.rssi)));
-
-        if (readings.length >= 3) { // Require 3 data points
-            const avgRssi = readings.slice(0, 3).reduce((a, b) => a + parseFloat(b.rssi), 0) / 3;
-            const avgSnr = readings.slice(0, 3).reduce((a, b) => a + parseFloat(b.snr), 0) / 3;
-
-            // For static params, take the most recent (or first)
-            const last = readings[readings.length - 1] || {};
-
-            delete activeSessions[sessionId];
-            res.json({
-                status: 'complete',
-                avg_rssi: avgRssi.toFixed(2),
-                avg_snr: avgSnr.toFixed(2),
-                sf: last.spreading_factor || 7,
-                bw: last.bandwidth,
-                cr: last.code_rate,
-                freq: last.frequency,
-                crc: last.crc_status,
-                channel: last.channel,
-                adr: last.adr,
-                gw: last.gateway_id
-            });
-        } else {
-            res.json({ status: 'pending', count: readings.length, required: 3 });
+        if (updated.rowCount === 0) {
+            await client.query('ROLLBACK');
+            return res.status(409).json({ error: 'Already configured' });
         }
-    } catch (e) {
-        res.status(500).json({ error: 'Polling error' });
-    }
-});
-
-app.post('/api/save-point', async (req, res) => {
-    const { avg_rssi, avg_snr, sf, bw, cr, freq, crc, channel, adr, gw, lat, lng, note } = req.body;
-    try {
-        await pool.query('INSERT INTO saved_points (avg_rssi, avg_snr, spreading_factor, bandwidth, code_rate, frequency, crc_status, channel, adr, gateway_id, latitude, longitude, note) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, $12, $13)',
-            [avg_rssi, avg_snr, sf || 7, bw, cr, freq, crc, channel, adr, gw, lat, lng, note || '']);
-        res.json({ success: true });
-    } catch (e) {
-        res.status(500).json({ error: 'Save failed' });
-    }
-});
-
-app.delete('/api/points/:id', async (req, res) => {
-    if (!req.session.userId) return res.status(401).send('Unauthorized');
-    const { id } = req.params;
-    try {
-        await pool.query('DELETE FROM saved_points WHERE id = $1', [id]);
-        // Also allow deleting "live" measurements? Usually unwanted, but let's stick to saved_points for now as requested.
-        // If user wants to delete live points, they usually clear all. 
-        // Let's assume this is for "saved" points only for now.
-        res.json({ success: true });
-    } catch (e) {
-        res.status(500).json({ error: 'Delete failed' });
-    }
-});
-
-// Planner Save
-app.post('/api/save-scenario', async (req, res) => {
-    const { gateways } = req.body;
-    if (!gateways || !Array.isArray(gateways)) return res.status(400).send('Invalid data');
-    try {
-        for (const g of gateways) {
-            await pool.query('INSERT INTO planned_gateways (latitude, longitude, radius, frequency) VALUES ($1, $2, $3, $4)', [g.lat, g.lng, g.radius, g.freq]);
+        await client.query('INSERT INTO app_config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2', ['app_name', appName]);
+        await client.query('INSERT INTO app_config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2', ['admin_user', adminUser]);
+        await client.query('INSERT INTO app_config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2', ['admin_pass', hash]);
+        if (domainName) {
+            await client.query('INSERT INTO app_config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2', ['domain_name', domainName]);
         }
+        await client.query('COMMIT');
+        await loadAppConfig();
+        await updateCaddyConfig(domainName || null);
         res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ error: 'Save error' });
+    } catch (e) {
+        await client.query('ROLLBACK').catch(() => {});
+        next(e);
+    } finally {
+        client.release();
     }
 });
 
-// Integrations - Management
-app.get('/api/integrations', async (req, res) => {
-    if (!req.session.userId) return res.status(401).send('Unauthorized');
+// --- Panel locations ---
+app.get('/api/panel-locations', async (req, res, next) => {
     try {
-        const result = await pool.query('SELECT id, name, endpoint_slug, created_at FROM integrations ORDER BY created_at DESC');
+        const result = await pool.query('SELECT id, location_name, panel_count, latitude, longitude, note, created_at FROM panel_locations ORDER BY created_at DESC');
         res.json(result.rows);
     } catch (e) {
-        res.status(500).json({ error: 'Fetch error' });
+        next(e);
     }
 });
 
-app.post('/api/integrations', async (req, res) => {
-    if (!req.session.userId) return res.status(401).send('Unauthorized');
-    const { name, slug, script } = req.body;
+app.post('/api/panel-locations', validate(PanelSchema), async (req, res, next) => {
     try {
-        await pool.query('INSERT INTO integrations (name, endpoint_slug, decoder_script) VALUES ($1, $2, $3)', [name, slug, script]);
-        await pool.query("INSERT INTO system_logs (source, level, message, details) VALUES ('system', 'info', 'Integration Created', $1)", [JSON.stringify({ name, slug })]);
+        const { location_name, panel_count, latitude, longitude, note } = req.validated;
+        await pool.query(
+            'INSERT INTO panel_locations (location_name, panel_count, latitude, longitude, note) VALUES ($1, $2, $3, $4, $5)',
+            [location_name, panel_count, latitude, longitude, note ?? null]
+        );
         res.json({ success: true });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        next(e);
     }
 });
 
-app.delete('/api/integrations/:id', async (req, res) => {
-    if (!req.session.userId) return res.status(401).send('Unauthorized');
-    const { id } = req.params;
+app.delete('/api/panel-locations/:id', validateParams(IdParamSchema), async (req, res, next) => {
     try {
-        await pool.query('DELETE FROM integrations WHERE id = $1', [id]);
+        const { id } = req.validatedParams;
+        const result = await pool.query('DELETE FROM panel_locations WHERE id = $1', [id]);
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: 'Not found' });
+        }
         res.json({ success: true });
     } catch (e) {
-        res.status(500).json({ error: 'Delete failed' });
+        next(e);
     }
 });
 
-app.get('/api/system-logs', async (req, res) => {
+app.get('/api/export-csv', strictLimiter, async (req, res, next) => {
     if (!req.session.userId) return res.status(401).send('Unauthorized');
     try {
-        const result = await pool.query('SELECT * FROM system_logs ORDER BY created_at DESC LIMIT 50');
-        res.json(result.rows);
+        const result = await pool.query('SELECT location_name, panel_count, latitude, longitude, note, created_at FROM panel_locations ORDER BY created_at DESC');
+        const header = 'Konum Adı,Panel Sayısı,Enlem,Boylam,Not,Tarih\n';
+        const rows = result.rows.map(r =>
+            `"${(r.location_name || '').replace(/"/g, '""')}",${r.panel_count},${r.latitude},${r.longitude},"${(r.note || '').replace(/"/g, '""')}",${r.created_at}`
+        );
+        res.header('Content-Type', 'text/csv; charset=utf-8');
+        res.header('Content-Disposition', 'attachment; filename=panel_envanter.csv');
+        res.send('\uFEFF' + header + rows.join('\n'));
     } catch (e) {
-        res.status(500).json({ error: 'Fetch logs error' });
+        next(e);
     }
 });
 
-// Dynamic Webhook Handler Logic
-const processWebhook = async (slug, req, res) => {
-    const loggingContext = { slug, payload: req.body };
-
-    try {
-        const result = await pool.query('SELECT decoder_script FROM integrations WHERE endpoint_slug = $1', [slug]);
-        if (result.rows.length === 0) {
-            await pool.query("INSERT INTO system_logs (source, level, message, details) VALUES ('webhook', 'warn', 'Endpoint Not Found', $1)", [JSON.stringify(loggingContext)]);
-            return res.status(404).send('Not Found');
-        }
-
-        const parserFunc = new Function('payload', result.rows[0].decoder_script);
-        let parsed;
-        try {
-            parsed = parserFunc(req.body);
-            console.log('🔍 Webhook Parsed Data:', JSON.stringify(parsed, null, 2));
-        } catch (e) {
-            await pool.query("INSERT INTO system_logs (source, level, message, details) VALUES ('webhook', 'error', 'Decoder Script Failed', $1)",
-                [JSON.stringify({ ...loggingContext, error: e.message })]);
-            return res.status(400).send('Decoder Error');
-        }
-
-        // Logic: Accept NULL location so we can save RSSI/SNR/SF for "Drive Test Mode"
-        const lat = parsed.latitude || parsed.lat || null;
-        const lng = parsed.longitude || parsed.lng || parsed.lon || null;
-        const sf = parsed.spreadingFactor || parsed.sf || parsed.spreading_factor || null;
-        const rssi = parsed.rssi || -120;
-        const snr = parsed.snr || 0;
-
-        await pool.query('INSERT INTO measurements (gateway_id, rssi, snr, frequency, spreading_factor, bandwidth, code_rate, crc_status, channel, adr, latitude, longitude) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)',
-            [parsed.gateway_id || 'gw', rssi, snr, parsed.frequency || 868, sf, parsed.bandwidth, parsed.codeRate, parsed.crc_status, parsed.channel, parsed.adr, lat, lng]);
-
-        const logMsg = (lat && lng) ? 'Data Processed Successfully' : 'Data Received (Waiting for Location Fix)';
-        await pool.query("INSERT INTO system_logs (source, level, message, details) VALUES ('webhook', 'info', $1, $2)",
-            [logMsg, JSON.stringify({ ...loggingContext, parsed })]);
-
-        res.send('OK');
-    } catch (e) {
-        console.error(e);
-        await pool.query("INSERT INTO system_logs (source, level, message, details) VALUES ('webhook', 'error', 'System Error', $1)",
-            [JSON.stringify({ ...loggingContext, error: e.message })]);
-        res.status(500).send('Error');
-    }
-};
-
-// Default /webhook
-app.post('/webhook', async (req, res) => {
-    try {
-        const result = await pool.query("SELECT endpoint_slug FROM integrations WHERE endpoint_slug IN ('webhook', 'chirpstack', 'default') ORDER BY CASE endpoint_slug WHEN 'webhook' THEN 1 WHEN 'chirpstack' THEN 2 ELSE 3 END LIMIT 1");
-        if (result.rows.length > 0) {
-            return processWebhook(result.rows[0].endpoint_slug, req, res);
-        } else {
-            await pool.query("INSERT INTO system_logs (source, level, message, details) VALUES ('webhook', 'warn', 'Root Webhook Hit but No Default Integration Found', $1)", [JSON.stringify(req.body)]);
-            res.status(404).send('No integration configured for /webhook');
-        }
-    } catch (e) {
-        res.status(500).send('System Error');
-    }
+// --- Global error handler (no stack to client) ---
+app.use((err, req, res, next) => {
+    logger.error('Request error: ' + err.message);
+    res.status(500).json({ error: 'Internal Server Error' });
 });
 
-// Specific /webhook/:slug
-app.post('/webhook/:slug', async (req, res) => {
-    processWebhook(req.params.slug, req, res);
+const server = app.listen(port, () => {
+    logger.info('Server running on port ' + port);
 });
 
-// Start
-app.listen(port, () => {
-    console.log(`ARIOT Server running on port ${port}`);
-});
+// --- Graceful shutdown (Docker SIGTERM / Ctrl+C SIGINT) ---
+function shutdown() {
+    logger.info('Shutting down...');
+    server.close(() => {
+        pool.end().then(() => {
+            logger.info('Closed.');
+            process.exit(0);
+        }).catch((err) => {
+            logger.error('Pool close error: ' + err.message);
+            process.exit(1);
+        });
+    });
+}
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);

@@ -1,56 +1,68 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ARIOT - IoT Dashboard</title>
-    <!-- CSS -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0f172a">
+    <title>Panel Envanter</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="css/style.css">
-    <!-- Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
-
 <body>
-
     <div id="map"></div>
 
-    <div class="ui-layer">
-        <nav class="top-nav">
-            <span id="app-brand"
-                style="margin-right: 20px; font-weight: bold; font-size: 1.2rem; color: #3b82f6;">ARIOT</span>
-            <a href="planner.html" class="nav-btn">AI Planner</a>
-            <a href="#" class="nav-btn active">Live Map</a>
-            <a href="integrations.html" class="nav-btn">Integrations</a>
-        </nav>
+    <header class="app-header">
+        <span id="app-brand">Panel Envanter</span>
+        <a href="/api/export-csv" class="header-btn export-btn" id="btn-export">Excel İndir</a>
+    </header>
 
-        <div class="bottom-controls">
-            <button id="btn-start" class="control-btn btn-start">
-                <span>▶</span> Start Measurement
-            </button>
-            <button id="btn-clear" class="control-btn btn-clear">
-                <span>🗑</span> Clear Map
-            </button>
-            <button id="btn-export" class="control-btn" style="background: #eab308; color: black;">
-                <span>⬇</span> Export CSV
-            </button>
+    <!-- Konum yükleniyor / hata mesajı -->
+    <div id="location-status" class="location-status" aria-live="polite">
+        <span class="location-status-text">Konum alınıyor...</span>
+        <button type="button" class="location-retry" id="location-retry" style="display:none;">Yeniden dene</button>
+    </div>
+
+    <!-- Modal: Yeni konum kaydı -->
+    <div id="add-modal" class="modal" role="dialog" aria-labelledby="modal-title" aria-modal="true" hidden>
+        <div class="modal-backdrop" id="modal-backdrop"></div>
+        <div class="modal-box">
+            <h2 id="modal-title">Yeni Panel Konumu</h2>
+            <p class="modal-sub">Mevcut GPS konumunuz kaydedilecek.</p>
+            <form id="add-form" class="add-form">
+                <div class="form-group">
+                    <label for="input-location-name">Konum adı <span class="required">*</span></label>
+                    <input type="text" id="input-location-name" name="location_name" required placeholder="Örn: A Blok Giriş" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label for="input-panel-count">Panel sayısı</label>
+                    <input type="number" id="input-panel-count" name="panel_count" min="1" value="1" placeholder="1">
+                </div>
+                <div class="form-group">
+                    <label for="input-note">Not (opsiyonel)</label>
+                    <input type="text" id="input-note" name="note" placeholder="Ek bilgi">
+                </div>
+                <div class="form-group coords-readonly">
+                    <label>Enlem / Boylam</label>
+                    <span id="display-coords">—</span>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="btn-cancel">İptal</button>
+                    <button type="submit" class="btn btn-primary" id="btn-save">Kaydet</button>
+                </div>
+            </form>
         </div>
-
-        <!-- Signal Chart Overlay (Bottom Right) -->
-
     </div>
 
-    <div id="status-box">
-        <div class="loader"></div>
-        <h3 id="status-text">Measuring (0/5)</h3>
-        <p>Please wait for samples...</p>
+    <!-- Mobil: Alt bar - Yeni kayıt butonu -->
+    <div class="bottom-bar">
+        <button type="button" class="fab" id="btn-add-location" title="Yeni konum ekle">
+            <span class="fab-icon">+</span>
+            <span class="fab-label">Yeni Konum</span>
+        </button>
     </div>
-
-    <!-- Scripts -->
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="js/main.js"></script>
 </body>
-
 </html>

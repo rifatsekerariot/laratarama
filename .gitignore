@@ -2,6 +2,11 @@
 node_modules/
 npm-debug.log
 
+# Logs (winston)
+app.log
+error.log
+logs/
+
 # Environment
 .env
 
