@@ -33,19 +33,38 @@ const port = process.env.PORT || 3000;
 app.set('trust proxy', 1);
 
 // --- Security headers ---
-app.use(helmet({
-    contentSecurityPolicy: {
-        directives: {
-            defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "https://unpkg.com"],
-            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://unpkg.com"],
-            fontSrc: ["'self'", "https://fonts.gstatic.com", "https://unpkg.com"],
-            imgSrc: ["'self'", "data:", "https://*.tile.openstreetmap.org", "http://*.tile.openstreetmap.org", "https://unpkg.com"],
-            connectSrc: ["'self'", "https://*.tile.openstreetmap.org", "http://*.tile.openstreetmap.org"]
-        }
-    },
-    hsts: { maxAge: 31536000, includeSubDomains: true, preload: true }
-}));
+// upgradeInsecureRequests: sadece HTTPS'te açık (HTTP'de null → tarayıcı HTTPS'e zorlanmaz, CONNECTION_REFUSED önlenir).
+// COOP: sadece HTTPS'te (cross-origin opener saldırılarına karşı). CORP: aşağıdaki middleware ile same-origin (kaynak çalınmasına karşı).
+// originAgentCluster: kapalı (tarayıcı uyarısı önlenir; process izolasyonu isteğe bağlı).
+app.use((req, res, next) => {
+    const isSecure = req.secure || req.get('x-forwarded-proto') === 'https' || req.hostname === 'localhost';
+    const cspDirectives = {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "https://unpkg.com"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://unpkg.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com", "https://unpkg.com"],
+        imgSrc: ["'self'", "data:", "https://*.tile.openstreetmap.org", "http://*.tile.openstreetmap.org", "https://unpkg.com"],
+        connectSrc: ["'self'", "https://*.tile.openstreetmap.org", "http://*.tile.openstreetmap.org"]
+    };
+    if (isSecure) {
+        cspDirectives.upgradeInsecureRequests = [];
+    } else {
+        cspDirectives.upgradeInsecureRequests = null;
+    }
+    helmet({
+        contentSecurityPolicy: { directives: cspDirectives },
+        hsts: isSecure ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
+        crossOriginOpenerPolicy: isSecure,
+        crossOriginEmbedderPolicy: false,
+        crossOriginResourcePolicy: false,
+        originAgentCluster: false
+    })(req, res, next);
+});
+// CORP: Helmet crossOriginResourcePolicy aynı zamanda Origin-Agent-Cluster eklediği için burada sadece CORP set ediyoruz (güvenlik için).
+app.use((_req, res, next) => {
+    res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+    next();
+});
 
 // --- CORS: strict (no * in production) ---
 const corsOptions = {
@@ -145,9 +164,10 @@ function buildCaddyConfig(domainName) {
         }
     };
     if (domainName) {
-        servers.domain = {
-            listen: [`https://${domainName}`],
+        servers.https = {
+            listen: [':443'],
             routes: [{
+                match: [{ host: [domainName] }],
                 handle: [{
                     handler: 'reverse_proxy',
                     upstreams: [{ dial: 'app:3000' }]
@@ -194,7 +214,8 @@ let appConfig = {
     configured: false,
     appName: 'Panel Envanter',
     adminUser: null,
-    adminPassHash: null
+    adminPassHash: null,
+    domainName: null
 };
 
 async function loadAppConfig() {
@@ -207,6 +228,10 @@ async function loadAppConfig() {
             appConfig.appName = map['app_name'] || appConfig.appName;
             appConfig.adminUser = map['admin_user'] || null;
             appConfig.adminPassHash = map['admin_pass'] || null;
+            appConfig.domainName = map['domain_name'] || null;
+        }
+        if (appConfig.domainName) {
+            updateCaddyConfig(appConfig.domainName).catch(e => logger.warn('Caddy sync on load: ' + (e.message || e)));
         }
     } catch (e) {
         logger.warn('Config load failed: ' + e.message);

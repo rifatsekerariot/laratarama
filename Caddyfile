@@ -1,5 +1,3 @@
-# Default: allow access via IP (port 80) before domain is set.
-# After setup, Node pushes full config (including HTTPS for domain) via Admin API.
 :80 {
-    reverse_proxy app:3000
+	reverse_proxy app:3000
 }

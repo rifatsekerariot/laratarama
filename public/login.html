@@ -20,35 +20,7 @@
         </form>
     </div>
 
-    <script>
-        document.getElementById('login-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const user = document.getElementById('username').value;
-            const pass = document.getElementById('password').value;
-            const errDiv = document.getElementById('error-msg');
-
-            try {
-                const res = await fetch('/api/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user, pass })
-                });
-
-                if (res.ok) {
-                    window.location.href = '/algorithm.html'; // Default to dashboard (handled by static index or main)
-                    // Note: User asked to run full project, index.html is main.
-                    window.location.href = '/';
-                } else {
-                    errDiv.style.display = 'block';
-                    errDiv.innerText = 'Access Denied';
-                }
-            } catch (error) {
-                console.error(error);
-                errDiv.style.display = 'block';
-                errDiv.innerText = 'Server Error';
-            }
-        });
-    </script>
+    <script src="/js/login.js"></script>
 </body>
 
 </html>
